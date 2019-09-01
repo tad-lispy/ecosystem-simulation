@@ -1,0 +1,11 @@
+/elm-stuff
+/**/.DS_Store
+*.swp
+.#*
+/index.html
+/public/
+/built/
+/dist/
+.cache/
+/node_modules/
+.installed

@@ -1,0 +1,17 @@
+{
+  "name": "seamless-finite-surface",
+  "version": "1.0.0",
+  "description": "Track relative positions of objects without absolute coordinate system on a flat, finite surface that wraps.",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Tad Lispy (https://tad-lispy.com/)",
+  "license": "GPL-3.0-or-later",
+  "devDependencies": {
+    "elm-hot": "^1.1.2",
+    "node-elm-compiler": "^5.0.4",
+    "parcel": "^1.12.3"
+  },
+  "dependencies": {}
+}
