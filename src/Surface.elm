@@ -56,10 +56,20 @@ remove id (Surface this) =
 
 entities : Int -> Surface -> List ( Id, Vector2d )
 entities limit (Surface this) =
+    let
+        translation =
+            Vector2d.from this.cursor Point2d.origin
+    in
     this.entities
+        |> IntDict.map
+            (\_ point ->
+                point
+                    |> Point2d.translateBy translation
+                    |> wrap this.size
+            )
         |> IntDict.toList
         |> List.map
-            (Tuple.mapSecond (Vector2d.from this.cursor))
+            (Tuple.mapSecond (Vector2d.from Point2d.origin))
         |> List.sortBy
             (Tuple.second >> Vector2d.squaredLength)
         |> List.take limit
@@ -69,15 +79,14 @@ render : Float -> Float -> Surface -> List ( Id, Point2d )
 render width height (Surface this) =
     let
         translation =
-            this.cursor
-                |> Vector2d.from Point2d.origin
+            Vector2d.from this.cursor Point2d.origin
     in
     this.entities
         |> IntDict.map
             (\_ point ->
                 point
                     |> Point2d.translateBy translation
-                    |> normalize this.size
+                    |> wrap this.size
             )
         |> IntDict.filter
             (\_ point ->
@@ -94,7 +103,7 @@ shift vector (Surface this) =
             | cursor =
                 this.cursor
                     |> Point2d.translateBy vector
-                    |> normalize this.size
+                    |> wrap this.size
         }
 
 
@@ -107,9 +116,24 @@ shiftTo id (Surface this) =
         |> Maybe.map Surface
 
 
-normalize : Float -> Point2d -> Point2d
-normalize size point =
+{-| Place the point in a coordinate system between -size / 2 and size / 2
+
+    Point2d.fromCoordinates (0, 0)
+        |> wrap 100
+        --> Point2d.fromCoordinates (0, 0)
+
+    Point2d.fromCoordinates (20, 20)
+        |> wrap 100
+        --> Point2d.fromCoordinates (20, 20)
+
+    Point2d.fromCoordinates (60, 20)
+        |> wrap 100
+        --> Point2d.fromCoordinates (-40, 20)
+
+-}
+wrap : Float -> Point2d -> Point2d
+wrap size point =
     Point2d.fromCoordinates
-        ( fractionalModBy size (Point2d.xCoordinate point)
-        , fractionalModBy size (Point2d.yCoordinate point)
+        ( fractionalModBy size (Point2d.xCoordinate point + size / 2) - (size / 2)
+        , fractionalModBy size (Point2d.yCoordinate point + size / 2) - (size / 2)
         )
