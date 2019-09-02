@@ -1,5 +1,5 @@
 {
-  "name": "seamless-finite-surface",
+  "name": "edgless-finite-surface",
   "version": "1.0.0",
   "description": "Track relative positions of objects without absolute coordinate system on a flat, finite surface that wraps.",
   "main": "dist/index.js",
