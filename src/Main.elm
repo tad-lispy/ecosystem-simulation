@@ -3,17 +3,17 @@ module Main exposing (main)
 import Browser
 import Browser.Events
 import Circle2d
+import Geometry.Interop.LinearAlgebra.Point2d as Point2d
 import Geometry.Svg
 import Html exposing (Html)
 import Html.Events
 import List.Extra as List
+import Math.Vector2 as Vector2 exposing (Vec2, vec2)
 import Maybe.Extra as Maybe
-import Point2d exposing (Point2d)
 import Result.Extra as Result
 import Surface exposing (Surface)
 import Svg exposing (Svg)
 import Svg.Attributes
-import Vector2d
 
 
 main : Program Flags Model Msg
@@ -49,14 +49,11 @@ init _ =
                 |> List.foldl
                     (\id surface ->
                         surface
-                            |> Surface.shift
-                                (Vector2d.fromPolarComponents
-                                    ( 30, toFloat id |> degrees )
-                                )
+                            |> Surface.shift (vec2 30 (toFloat id))
                             |> Surface.place id
                     )
                     (Surface.empty 500)
-      , paused = False
+      , paused = True
       }
     , Cmd.none
     )
@@ -92,22 +89,21 @@ update msg model =
                                         |> List.map Tuple.second
                                         |> List.map
                                             (\vector ->
-                                                vector
-                                                    |> Vector2d.polarComponents
-                                                    |> Tuple.mapFirst (\length -> 10 / (length ^ 2))
-                                                    |> Tuple.mapFirst
-                                                        (\length ->
-                                                            if isNaN length || isInfinite length then
-                                                                0
+                                                let
+                                                    length =
+                                                        Vector2.lengthSquared vector
+                                                in
+                                                if length == 0 then
+                                                    vec2 0 0
 
-                                                            else
-                                                                length
-                                                        )
-                                                    |> Vector2d.fromPolarComponents
-                                                    |> Vector2d.reverse
+                                                else
+                                                    vector
+                                                        |> Vector2.normalize
+                                                        |> Vector2.negate
+                                                        |> Vector2.scale (-10 / length)
                                             )
-                                        |> List.foldl1 Vector2d.sum
-                                        |> Maybe.withDefault Vector2d.zero
+                                        |> List.foldl1 Vector2.add
+                                        |> Maybe.withDefault (vec2 0 0)
                                 )
                             )
 
@@ -119,8 +115,7 @@ update msg model =
                                     |> Surface.shiftTo id
                                     |> Result.fromMaybe ("Shifting to non existent entity " ++ String.fromInt id)
                                     |> Result.withDefault memo
-                                    |> Surface.shift (Vector2d.scaleBy virtualDelta force)
-                                    -- |> Surface.shift (Vector2d.fromComponents ( 1, 2 ))
+                                    |> Surface.shift (Vector2.scale virtualDelta force)
                                     |> Surface.place id
                             )
                             surface
@@ -129,12 +124,13 @@ update msg model =
                     min delta 32
 
                 shift =
-                    Vector2d.fromComponents ( virtualDelta / 100, 0 )
+                    vec2 1 2
+                        |> Vector2.scale (virtualDelta / 100)
             in
             ( { model
                 | surface =
                     model.surface
-                        --                        |> Surface.shift shift
+                        |> Surface.shift shift
                         |> Surface.place -1
                         |> updateSurface
                         |> Surface.shiftTo -1
@@ -199,10 +195,11 @@ view model =
         ]
 
 
-scene : List ( Int, Point2d ) -> Svg msg
+scene : List ( Int, Vec2 ) -> Svg msg
 scene entities =
     entities
         |> List.map Tuple.second
+        |> List.map Point2d.fromVec2
         |> List.map
             (Circle2d.withRadius 3)
         |> List.map

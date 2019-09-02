@@ -11,15 +11,14 @@ module Surface exposing
 
 import Basics.Extra exposing (fractionalModBy)
 import IntDict exposing (IntDict)
-import Point2d exposing (Point2d)
-import Vector2d exposing (Vector2d)
+import Math.Vector2 as Vector2 exposing (Vec2, vec2)
 
 
 type Surface
     = Surface
         { size : Float
-        , cursor : Point2d
-        , entities : IntDict Point2d
+        , cursor : Vec2
+        , entities : IntDict Vec2
         }
 
 
@@ -31,7 +30,7 @@ empty : Float -> Surface
 empty size =
     Surface
         { size = size
-        , cursor = Point2d.origin
+        , cursor = vec2 0 0
         , entities = IntDict.empty
         }
 
@@ -54,55 +53,45 @@ remove id (Surface this) =
         }
 
 
-entities : Int -> Surface -> List ( Id, Vector2d )
+entities : Int -> Surface -> List ( Id, Vec2 )
 entities limit (Surface this) =
-    let
-        translation =
-            Vector2d.from this.cursor Point2d.origin
-    in
     this.entities
         |> IntDict.map
             (\_ point ->
                 point
-                    |> Point2d.translateBy translation
+                    |> Vector2.sub this.cursor
                     |> wrap this.size
             )
         |> IntDict.toList
-        |> List.map
-            (Tuple.mapSecond (Vector2d.from Point2d.origin))
         |> List.sortBy
-            (Tuple.second >> Vector2d.squaredLength)
+            (Tuple.second >> Vector2.lengthSquared)
         |> List.take limit
 
 
-render : Float -> Float -> Surface -> List ( Id, Point2d )
+render : Float -> Float -> Surface -> List ( Id, Vec2 )
 render width height (Surface this) =
-    let
-        translation =
-            Vector2d.from this.cursor Point2d.origin
-    in
     this.entities
         |> IntDict.map
             (\_ point ->
                 point
-                    |> Point2d.translateBy translation
+                    |> Vector2.sub this.cursor
                     |> wrap this.size
             )
         |> IntDict.filter
             (\_ point ->
-                (Point2d.xCoordinate point < width)
-                    && (Point2d.yCoordinate point < height)
+                (Vector2.getX point < width)
+                    && (Vector2.getY point < height)
             )
         |> IntDict.toList
 
 
-shift : Vector2d -> Surface -> Surface
+shift : Vec2 -> Surface -> Surface
 shift vector (Surface this) =
     Surface
         { this
             | cursor =
                 this.cursor
-                    |> Point2d.translateBy vector
+                    |> Vector2.add vector
                     |> wrap this.size
         }
 
@@ -131,9 +120,8 @@ shiftTo id (Surface this) =
         --> Point2d.fromCoordinates (-40, 20)
 
 -}
-wrap : Float -> Point2d -> Point2d
+wrap : Float -> Vec2 -> Vec2
 wrap size point =
-    Point2d.fromCoordinates
-        ( fractionalModBy size (Point2d.xCoordinate point + size / 2) - (size / 2)
-        , fractionalModBy size (Point2d.yCoordinate point + size / 2) - (size / 2)
-        )
+    vec2
+        (fractionalModBy size (Vector2.getX point + size / 2) - (size / 2))
+        (fractionalModBy size (Vector2.getY point + size / 2) - (size / 2))

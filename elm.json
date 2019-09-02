@@ -15,7 +15,9 @@
             "elm-community/list-extra": "8.2.2",
             "elm-community/maybe-extra": "5.0.0",
             "elm-community/result-extra": "2.2.1",
+            "elm-explorations/linear-algebra": "1.0.3",
             "ianmackenzie/elm-geometry": "1.2.1",
+            "ianmackenzie/elm-geometry-linear-algebra-interop": "1.0.2",
             "ianmackenzie/elm-geometry-svg": "1.0.2"
         },
         "indirect": {
