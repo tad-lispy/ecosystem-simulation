@@ -147,49 +147,60 @@ remove entity cluster =
                         remainingEntities =
                             IntDict.remove entity entities
                     in
-                    if remainingEntities == IntDict.empty then
-                        Empty size
+                    case IntDict.toList remainingEntities of
+                        [] ->
+                            Empty size
 
-                    else
-                        let
-                            subClusters =
-                                case
-                                    ( Vector2.getX position < (size / 2)
-                                    , Vector2.getY position < (size / 2)
-                                    )
-                                of
-                                    ( True, True ) ->
-                                        { existingSubClusters
-                                            | topLeft =
-                                                existingSubClusters.topLeft
-                                                    |> remove entity
-                                        }
+                        ( lastEntity, lastPosition ) :: [] ->
+                            -- NOTE: It is possible that more than one entity
+                            -- exsits in the same position. Ideally in such
+                            -- case the cluster should collapse into a
+                            -- singleton. Implementing it would add complexity
+                            -- and I assume it's a rare situation. So collapse
+                            -- will happen only when there is only one entity
+                            -- left.
+                            Singleton size [ lastEntity ] lastPosition
 
-                                    ( False, True ) ->
-                                        { existingSubClusters
-                                            | topRight =
-                                                existingSubClusters.topRight
-                                                    |> remove entity
-                                        }
+                        _ ->
+                            let
+                                subClusters =
+                                    case
+                                        ( Vector2.getX position < (size / 2)
+                                        , Vector2.getY position < (size / 2)
+                                        )
+                                    of
+                                        ( True, True ) ->
+                                            { existingSubClusters
+                                                | topLeft =
+                                                    existingSubClusters.topLeft
+                                                        |> remove entity
+                                            }
 
-                                    ( True, False ) ->
-                                        { existingSubClusters
-                                            | bottomLeft =
-                                                existingSubClusters.bottomLeft
-                                                    |> remove entity
-                                        }
+                                        ( False, True ) ->
+                                            { existingSubClusters
+                                                | topRight =
+                                                    existingSubClusters.topRight
+                                                        |> remove entity
+                                            }
 
-                                    ( False, False ) ->
-                                        { existingSubClusters
-                                            | bottomRight =
-                                                existingSubClusters.bottomRight
-                                                    |> remove entity
-                                        }
-                        in
-                        Cluster
-                            size
-                            remainingEntities
-                            subClusters
+                                        ( True, False ) ->
+                                            { existingSubClusters
+                                                | bottomLeft =
+                                                    existingSubClusters.bottomLeft
+                                                        |> remove entity
+                                            }
+
+                                        ( False, False ) ->
+                                            { existingSubClusters
+                                                | bottomRight =
+                                                    existingSubClusters.bottomRight
+                                                        |> remove entity
+                                            }
+                            in
+                            Cluster
+                                size
+                                remainingEntities
+                                subClusters
 
 
 clusters : Float -> Vec2 -> Cluster -> List ( Vec2, List Entity )

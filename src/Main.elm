@@ -69,6 +69,7 @@ type Msg
     = Animate Float
     | Click Vec2
     | Insert Vec2 (Result Dom.Error Dom.Element)
+    | Remove Entity
     | Play
     | Pause
 
@@ -87,6 +88,14 @@ update msg model =
 
         Insert mousePosition (Err error) ->
             ( model
+            , Cmd.none
+            )
+
+        Remove entity ->
+            ( { model
+                | cluster =
+                    Cluster.remove entity model.cluster
+              }
             , Cmd.none
             )
 
@@ -247,9 +256,8 @@ viewCluster translation cluster =
                 ]
                 []
 
-        Cluster.Singleton viewport _ position ->
-            [ viewEntity position
-            , Svg.rect
+        Cluster.Singleton viewport entities position ->
+            Svg.rect
                 [ viewport
                     |> String.fromFloat
                     |> Svg.Attributes.width
@@ -261,7 +269,7 @@ viewCluster translation cluster =
                 , Svg.Attributes.fill "none"
                 ]
                 []
-            ]
+                :: List.map (viewEntity position) entities
                 |> Svg.g
                     [ translation
                         |> Transformation.Translate
@@ -287,9 +295,18 @@ viewCluster translation cluster =
                     ]
 
 
-viewEntity : Vec2 -> Svg Msg
-viewEntity position =
+viewEntity : Vec2 -> Entity -> Svg Msg
+viewEntity position entity =
+    let
+        removeDecoder : Decoder ( Msg, Bool )
+        removeDecoder =
+            Decode.succeed ( Remove entity, True )
+    in
     position
         |> Point2d.fromVec2
         |> Circle2d.withRadius 3
-        |> Geometry.Svg.circle2d [ Svg.Attributes.fill "red" ]
+        |> Geometry.Svg.circle2d
+            [ Svg.Attributes.fill "red"
+            , Svg.Attributes.style "cursor: pointer"
+            , Html.Events.stopPropagationOn "click" removeDecoder
+            ]
