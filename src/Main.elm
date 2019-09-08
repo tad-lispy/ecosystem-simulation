@@ -1,19 +1,24 @@
 module Main exposing (main)
 
+import Basics.Extra exposing (uncurry)
 import Browser
+import Browser.Dom as Dom
 import Browser.Events
 import Circle2d
+import Cluster exposing (Cluster)
 import Geometry.Interop.LinearAlgebra.Point2d as Point2d
 import Geometry.Svg
 import Html exposing (Html)
 import Html.Events
+import Json.Decode as Decode exposing (Decoder)
 import List.Extra as List
 import Math.Vector2 as Vector2 exposing (Vec2, vec2)
 import Maybe.Extra as Maybe
 import Result.Extra as Result
-import Surface exposing (Surface)
 import Svg exposing (Svg)
 import Svg.Attributes
+import Task exposing (Task)
+import Transformation exposing (Transformation)
 
 
 main : Program Flags Model Msg
@@ -31,29 +36,30 @@ type alias Flags =
 
 
 type alias Model =
-    { surface : Surface
-    , entities : List Int
+    { cluster : Cluster
+    , entities : List Entity
     , paused : Bool
+    , area : Vec2
+    , scroll : Vec2
     }
+
+
+type alias Entity =
+    Int
+
+
+universeSize : Float
+universeSize =
+    1000
 
 
 init : flags -> ( Model, Cmd Msg )
 init _ =
-    let
-        entities =
-            List.range 0 30
-    in
-    ( { entities = entities
-      , surface =
-            entities
-                |> List.foldl
-                    (\id surface ->
-                        surface
-                            |> Surface.shift (vec2 30 (toFloat id))
-                            |> Surface.place id
-                    )
-                    (Surface.empty 500)
+    ( { cluster = Cluster.Empty universeSize
       , paused = True
+      , area = vec2 (universeSize + 200) (universeSize + 200)
+      , scroll = vec2 -100 -100
+      , entities = []
       }
     , Cmd.none
     )
@@ -61,7 +67,8 @@ init _ =
 
 type Msg
     = Animate Float
-    | Insert
+    | Click Vec2
+    | Insert Vec2 (Result Dom.Error Dom.Element)
     | Play
     | Pause
 
@@ -70,86 +77,53 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Animate delta ->
-            let
-                forces =
-                    model.entities
-                        |> List.map
-                            (\id ->
-                                model.surface
-                                    |> Surface.shiftTo id
-                                    |> Maybe.map (Surface.entities 20)
-                                    |> Maybe.map (List.filter (Tuple.first >> (/=) id))
-                                    |> Maybe.map (Tuple.pair id)
-                            )
-                        |> Maybe.values
-                        |> List.map
-                            (Tuple.mapSecond
-                                (\neighbors ->
-                                    neighbors
-                                        |> List.map Tuple.second
-                                        |> List.map
-                                            (\vector ->
-                                                let
-                                                    length =
-                                                        Vector2.lengthSquared vector
-                                                in
-                                                if length == 0 then
-                                                    vec2 0 0
+            ( model, Cmd.none )
 
-                                                else
-                                                    vector
-                                                        |> Vector2.normalize
-                                                        |> Vector2.negate
-                                                        |> Vector2.scale (-10 / length)
-                                            )
-                                        |> List.foldl1 Vector2.add
-                                        |> Maybe.withDefault (vec2 0 0)
-                                )
-                            )
+        Click position ->
+            ( model
+            , Dom.getElement "scene"
+                |> Task.attempt (Insert position)
+            )
 
-                updateSurface surface =
-                    forces
-                        |> List.foldl
-                            (\( id, force ) memo ->
-                                memo
-                                    |> Surface.shiftTo id
-                                    |> Result.fromMaybe ("Shifting to non existent entity " ++ String.fromInt id)
-                                    |> Result.withDefault memo
-                                    |> Surface.shift (Vector2.scale virtualDelta force)
-                                    |> Surface.place id
-                            )
-                            surface
-
-                virtualDelta =
-                    min delta 32
-
-                shift =
-                    vec2 1 2
-                        |> Vector2.scale (virtualDelta / 100)
-            in
-            ( { model
-                | surface =
-                    model.surface
-                        |> Surface.shift shift
-                        |> Surface.place -1
-                        |> updateSurface
-                        |> Surface.shiftTo -1
-                        |> Result.fromMaybe "We lost our anchor!"
-                        |> Result.withDefault model.surface
-                        |> Surface.remove -1
-              }
+        Insert mousePosition (Err error) ->
+            ( model
             , Cmd.none
             )
 
-        Insert ->
+        Insert pointer (Ok dom) ->
             let
-                next =
+                entity =
                     List.length model.entities
+
+                position =
+                    vec2
+                        (Vector2.getX offset
+                            * Vector2.getX model.area
+                            / dom.element.width
+                        )
+                        (Vector2.getY offset
+                            * Vector2.getX model.area
+                            / dom.element.height
+                        )
+                        |> Vector2.add model.scroll
+
+                offset =
+                    Vector2.sub globalOffset element
+
+                globalOffset =
+                    Vector2.add pointer viewport
+
+                element =
+                    vec2 dom.element.x dom.element.y
+
+                viewport =
+                    vec2 dom.viewport.x dom.viewport.y
             in
             ( { model
-                | entities = next :: model.entities
-                , surface =
-                    Surface.place next model.surface
+                | entities =
+                    entity :: model.entities
+                , cluster =
+                    Cluster.insert position entity model.cluster
               }
             , Cmd.none
             )
@@ -181,32 +155,141 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
     Html.div []
-        [ model.surface
-            |> Surface.render 500 500
-            |> scene
+        [ viewScene
+            model.scroll
+            model.area
+            model.cluster
         , if model.paused then
             Html.button [ Html.Events.onClick Play ] [ Html.text "Play" ]
 
           else
             Html.button [ Html.Events.onClick Pause ] [ Html.text "Pause" ]
         , Html.button [ Html.Events.onClick (Animate 16) ] [ Html.text "Step" ]
-        , Html.button [ Html.Events.onClick Insert ] [ Html.text "Insert" ]
-        , Html.text <| String.fromInt <| List.length <| model.entities
         ]
 
 
-scene : List ( Int, Vec2 ) -> Svg msg
-scene entities =
-    entities
-        |> List.map Tuple.second
-        |> List.map Point2d.fromVec2
-        |> List.map
-            (Circle2d.withRadius 3)
-        |> List.map
-            (Geometry.Svg.circle2d [ Svg.Attributes.fill "red" ])
-        |> Svg.svg
-            [ Svg.Attributes.width "500"
-            , Svg.Attributes.height "500"
-            , Svg.Attributes.style "background: pink"
-            , Svg.Attributes.viewBox "-250 -250 500 500"
+viewScene : Vec2 -> Vec2 -> Cluster -> Svg Msg
+viewScene scroll area cluster =
+    let
+        mousePositionDecoder : (Vec2 -> Msg) -> Decoder Msg
+        mousePositionDecoder callback =
+            Decode.map2
+                vec2
+                (Decode.field "clientX" Decode.float)
+                (Decode.field "clientY" Decode.float)
+                |> Decode.map callback
+
+        viewbox =
+            [ Vector2.getX scroll
+            , Vector2.getY scroll
+            , Vector2.getX area
+            , Vector2.getY area
             ]
+                |> List.map String.fromFloat
+                |> String.join " "
+
+        viewport =
+            vec2 800 800
+    in
+    [ viewCluster (vec2 0 0) cluster
+    , viewCursor Nothing
+    ]
+        |> Svg.svg
+            [ Vector2.getX viewport
+                |> String.fromFloat
+                |> Svg.Attributes.width
+            , Vector2.getY viewport
+                |> String.fromFloat
+                |> Svg.Attributes.height
+            , Svg.Attributes.style "background: pink; cursor: crosshair"
+            , Svg.Attributes.viewBox viewbox
+            , Html.Events.on "click" (mousePositionDecoder Click)
+            , Svg.Attributes.id "scene"
+            ]
+
+
+viewCursor : Maybe Vec2 -> Svg Msg
+viewCursor cursor =
+    case cursor of
+        Nothing ->
+            Svg.g [] []
+
+        Just position ->
+            Svg.circle
+                [ Svg.Attributes.fill "black"
+                , Svg.Attributes.r "6"
+                , position
+                    |> Transformation.Translate
+                    |> Transformation.toString
+                    |> Svg.Attributes.transform
+                ]
+                []
+
+
+viewCluster : Vec2 -> Cluster -> Svg Msg
+viewCluster translation cluster =
+    case cluster of
+        Cluster.Empty viewport ->
+            Svg.rect
+                [ viewport
+                    |> String.fromFloat
+                    |> Svg.Attributes.width
+                , viewport
+                    |> String.fromFloat
+                    |> Svg.Attributes.height
+                , Svg.Attributes.stroke "white"
+                , Svg.Attributes.strokeWidth "1"
+                , Svg.Attributes.fill "none"
+                , translation
+                    |> Transformation.Translate
+                    |> Transformation.toString
+                    |> Svg.Attributes.transform
+                ]
+                []
+
+        Cluster.Singleton viewport _ position ->
+            [ viewEntity position
+            , Svg.rect
+                [ viewport
+                    |> String.fromFloat
+                    |> Svg.Attributes.width
+                , viewport
+                    |> String.fromFloat
+                    |> Svg.Attributes.height
+                , Svg.Attributes.stroke "green"
+                , Svg.Attributes.strokeWidth "1"
+                , Svg.Attributes.fill "none"
+                ]
+                []
+            ]
+                |> Svg.g
+                    [ translation
+                        |> Transformation.Translate
+                        |> Transformation.toString
+                        |> Svg.Attributes.transform
+                    ]
+
+        Cluster.Cluster viewport _ subClusters ->
+            [ subClusters.topLeft
+                |> viewCluster (vec2 0 0)
+            , subClusters.topRight
+                |> viewCluster (vec2 (viewport / 2) 0)
+            , subClusters.bottomLeft
+                |> viewCluster (vec2 0 (viewport / 2))
+            , subClusters.bottomRight
+                |> viewCluster (vec2 (viewport / 2) (viewport / 2))
+            ]
+                |> Svg.g
+                    [ translation
+                        |> Transformation.Translate
+                        |> Transformation.toString
+                        |> Svg.Attributes.transform
+                    ]
+
+
+viewEntity : Vec2 -> Svg Msg
+viewEntity position =
+    position
+        |> Point2d.fromVec2
+        |> Circle2d.withRadius 3
+        |> Geometry.Svg.circle2d [ Svg.Attributes.fill "red" ]

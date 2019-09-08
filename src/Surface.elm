@@ -1,7 +1,7 @@
 module Surface exposing
     ( Surface
+    , clusters
     , empty
-    , entities
     , place
     , remove
     , render
