@@ -196,20 +196,13 @@ viewScene scroll area cluster =
             ]
                 |> List.map String.fromFloat
                 |> String.join " "
-
-        viewport =
-            vec2 800 800
     in
     [ viewCluster (vec2 0 0) cluster
     , viewCursor Nothing
     ]
         |> Svg.svg
-            [ Vector2.getX viewport
-                |> String.fromFloat
-                |> Svg.Attributes.width
-            , Vector2.getY viewport
-                |> String.fromFloat
-                |> Svg.Attributes.height
+            [ Svg.Attributes.width "100%"
+            , Svg.Attributes.height "100%"
             , Svg.Attributes.style "background: pink; cursor: crosshair"
             , Svg.Attributes.viewBox viewbox
             , Html.Events.on "click" (mousePositionDecoder Click)
