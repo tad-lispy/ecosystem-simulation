@@ -38,6 +38,7 @@ type alias Flags =
 type alias Model =
     { cluster : Cluster
     , entities : List Entity
+    , selected : Maybe Entity
     , paused : Bool
     , area : Vec2
     , scroll : Vec2
@@ -57,6 +58,7 @@ init : flags -> ( Model, Cmd Msg )
 init _ =
     ( { cluster = Cluster.Empty universeSize
       , paused = True
+      , selected = Nothing
       , area = vec2 (universeSize + 200) (universeSize + 200)
       , scroll = vec2 -100 -100
       , entities = []
@@ -70,6 +72,7 @@ type Msg
     | Click Vec2
     | Insert Vec2 (Result Dom.Error Dom.Element)
     | Remove Entity
+    | Select (Maybe Entity)
     | Play
     | Pause
 
@@ -80,22 +83,14 @@ update msg model =
         Animate delta ->
             ( model, Cmd.none )
 
-        Click position ->
+        Click location ->
             ( model
             , Dom.getElement "scene"
-                |> Task.attempt (Insert position)
+                |> Task.attempt (Insert location)
             )
 
-        Insert mousePosition (Err error) ->
+        Insert _ (Err _) ->
             ( model
-            , Cmd.none
-            )
-
-        Remove entity ->
-            ( { model
-                | cluster =
-                    Cluster.remove entity model.cluster
-              }
             , Cmd.none
             )
 
@@ -104,7 +99,7 @@ update msg model =
                 entity =
                     List.length model.entities
 
-                position =
+                location =
                     vec2
                         (Vector2.getX offset
                             * Vector2.getX model.area
@@ -132,7 +127,22 @@ update msg model =
                 | entities =
                     entity :: model.entities
                 , cluster =
-                    Cluster.insert position entity model.cluster
+                    Cluster.insert location entity model.cluster
+              }
+            , Cmd.none
+            )
+
+        Remove entity ->
+            ( { model
+                | cluster =
+                    Cluster.remove entity model.cluster
+              }
+            , Cmd.none
+            )
+
+        Select selected ->
+            ( { model
+                | selected = selected
               }
             , Cmd.none
             )
@@ -167,6 +177,7 @@ view model =
         [ viewScene
             model.scroll
             model.area
+            model.selected
             model.cluster
         , if model.paused then
             Html.button [ Html.Events.onClick Play ] [ Html.text "Play" ]
@@ -177,8 +188,13 @@ view model =
         ]
 
 
-viewScene : Vec2 -> Vec2 -> Cluster -> Svg Msg
-viewScene scroll area cluster =
+viewScene :
+    Vec2
+    -> Vec2
+    -> Maybe Entity
+    -> Cluster
+    -> Svg Msg
+viewScene scroll area selected cluster =
     let
         mousePositionDecoder : (Vec2 -> Msg) -> Decoder Msg
         mousePositionDecoder callback =
@@ -197,35 +213,17 @@ viewScene scroll area cluster =
                 |> List.map String.fromFloat
                 |> String.join " "
     in
-    [ viewCluster (vec2 0 0) cluster
-    , viewCursor Nothing
+    [ viewSelection selected cluster
+    , viewCluster (vec2 0 0) cluster
     ]
         |> Svg.svg
             [ Svg.Attributes.width "100%"
             , Svg.Attributes.height "100%"
-            , Svg.Attributes.style "background: pink; cursor: crosshair"
+            , Svg.Attributes.style "background: black; cursor: crosshair"
             , Svg.Attributes.viewBox viewbox
             , Html.Events.on "click" (mousePositionDecoder Click)
             , Svg.Attributes.id "scene"
             ]
-
-
-viewCursor : Maybe Vec2 -> Svg Msg
-viewCursor cursor =
-    case cursor of
-        Nothing ->
-            Svg.g [] []
-
-        Just position ->
-            Svg.circle
-                [ Svg.Attributes.fill "black"
-                , Svg.Attributes.r "6"
-                , position
-                    |> Transformation.Translate
-                    |> Transformation.toString
-                    |> Svg.Attributes.transform
-                ]
-                []
 
 
 viewCluster : Vec2 -> Cluster -> Svg Msg
@@ -249,7 +247,7 @@ viewCluster translation cluster =
                 ]
                 []
 
-        Cluster.Singleton viewport entities position ->
+        Cluster.Singleton viewport entities location ->
             Svg.rect
                 [ viewport
                     |> String.fromFloat
@@ -262,7 +260,7 @@ viewCluster translation cluster =
                 , Svg.Attributes.fill "none"
                 ]
                 []
-                :: List.map (viewEntity position) entities
+                :: List.map (viewEntity location) entities
                 |> Svg.g
                     [ translation
                         |> Transformation.Translate
@@ -288,18 +286,70 @@ viewCluster translation cluster =
                     ]
 
 
+viewSelection : Maybe Entity -> Cluster -> Svg Msg
+viewSelection selected cluster =
+    case selected of
+        Nothing ->
+            Svg.g [] []
+
+        Just entity ->
+            case Cluster.location entity cluster of
+                Nothing ->
+                    Svg.g [] []
+
+                Just location ->
+                    cluster
+                        |> Cluster.clusters 0.9 location
+                        |> List.map
+                            (Tuple.mapFirst
+                                (\otherLocation ->
+                                    Vector2.sub otherLocation location
+                                )
+                            )
+                        |> List.map viewRelation
+                        |> Svg.g
+                            [ location
+                                |> Transformation.Translate
+                                |> Transformation.toString
+                                |> Svg.Attributes.transform
+                            ]
+
+
 viewEntity : Vec2 -> Entity -> Svg Msg
-viewEntity position entity =
+viewEntity location entity =
     let
         removeDecoder : Decoder ( Msg, Bool )
         removeDecoder =
             Decode.succeed ( Remove entity, True )
     in
-    position
+    location
         |> Point2d.fromVec2
         |> Circle2d.withRadius 3
         |> Geometry.Svg.circle2d
             [ Svg.Attributes.fill "red"
             , Svg.Attributes.style "cursor: pointer"
             , Html.Events.stopPropagationOn "click" removeDecoder
+            , Html.Events.onMouseEnter (Select <| Just entity)
+            , Html.Events.onMouseLeave (Select Nothing)
             ]
+
+
+viewRelation : ( Vec2, List Entity ) -> Svg Msg
+viewRelation ( vector, entities ) =
+    Svg.line
+        [ Svg.Attributes.x1 "0"
+        , Svg.Attributes.y1 "0"
+        , Svg.Attributes.x2
+            (vector
+                |> Vector2.getX
+                |> String.fromFloat
+            )
+        , Svg.Attributes.y2
+            (vector
+                |> Vector2.getY
+                |> String.fromFloat
+            )
+        , Svg.Attributes.stroke "white"
+        , Svg.Attributes.strokeWidth "1"
+        ]
+        []

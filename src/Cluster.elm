@@ -2,6 +2,7 @@ module Cluster exposing
     ( Cluster(..)
     , clusters
     , insert
+    , location
     , remove
     )
 
@@ -203,6 +204,23 @@ remove entity cluster =
                                 subClusters
 
 
+location : Entity -> Cluster -> Maybe Vec2
+location entity cluster =
+    case cluster of
+        Empty _ ->
+            Nothing
+
+        Singleton _ entities position ->
+            if List.member entity entities then
+                Just position
+
+            else
+                Nothing
+
+        Cluster _ entities _ ->
+            IntDict.get entity entities
+
+
 clusters : Float -> Vec2 -> Cluster -> List ( Vec2, List Entity )
 clusters precision viewpoint cluster =
     case cluster of
@@ -216,35 +234,45 @@ clusters precision viewpoint cluster =
             let
                 center =
                     vec2 (size / 2) (size / 2)
+
+                distance =
+                    Vector2.distance viewpoint center
             in
-            if Vector2.distance viewpoint center > precision then
+            if size / distance < precision then
                 [ ( center, IntDict.keys entities ) ]
 
             else
-                [ clusters
-                    precision
-                    viewpoint
-                    subClusters.topLeft
-                , clusters
-                    precision
-                    (Vector2.setX
-                        ((size / 2) + Vector2.getX viewpoint)
+                let
+                    topRightTranslation =
+                        vec2 (size / 2) 0
+
+                    bottomLeftTranslation =
+                        vec2 0 (size / 2)
+
+                    bottomRightTranslation =
+                        vec2 (size / 2) (size / 2)
+                in
+                [ subClusters.topLeft
+                    |> clusters
+                        precision
                         viewpoint
-                    )
-                    subClusters.topRight
-                , clusters
-                    precision
-                    (Vector2.setY
-                        ((size / 2) + Vector2.getY viewpoint)
-                        viewpoint
-                    )
-                    subClusters.bottomLeft
-                , clusters
-                    precision
-                    (Vector2.add
-                        (vec2 (size / 2) (size / 2))
-                        viewpoint
-                    )
-                    subClusters.bottomRight
+                , subClusters.topRight
+                    |> clusters
+                        precision
+                        (Vector2.sub viewpoint topRightTranslation)
+                    |> List.map
+                        (Tuple.mapFirst (Vector2.add topRightTranslation))
+                , subClusters.bottomLeft
+                    |> clusters
+                        precision
+                        (Vector2.sub viewpoint bottomLeftTranslation)
+                    |> List.map
+                        (Tuple.mapFirst (Vector2.add bottomLeftTranslation))
+                , subClusters.bottomRight
+                    |> clusters
+                        precision
+                        (Vector2.sub viewpoint bottomRightTranslation)
+                    |> List.map
+                        (Tuple.mapFirst (Vector2.add bottomRightTranslation))
                 ]
                     |> List.concat
