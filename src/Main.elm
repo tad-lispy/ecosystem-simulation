@@ -56,12 +56,29 @@ universeSize =
 
 init : flags -> ( Model, Cmd Msg )
 init _ =
-    ( { cluster = Cluster.Empty universeSize
+    let
+        entities =
+            List.range 0 199
+    in
+    ( { cluster =
+            entities
+                |> List.foldl
+                    (\entity memo ->
+                        let
+                            x =
+                                modBy 20 entity * 40 + 200 |> toFloat
+
+                            y =
+                                (entity // 20) * 40 + 200 |> toFloat
+                        in
+                        Cluster.insert (vec2 x y) entity memo
+                    )
+                    (Cluster.Empty universeSize)
       , paused = True
       , selected = Nothing
       , area = vec2 (universeSize + 200) (universeSize + 200)
       , scroll = vec2 -100 -100
-      , entities = []
+      , entities = entities
       }
     , Cmd.none
     )
@@ -81,7 +98,48 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Animate delta ->
-            ( model, Cmd.none )
+            let
+                cluster =
+                    forces
+                        |> List.foldl
+                            (\( entity, f ) memo ->
+                                case Cluster.location entity memo of
+                                    Nothing ->
+                                        memo
+
+                                    Just location ->
+                                        memo
+                                            |> Cluster.remove entity
+                                            |> Cluster.insert
+                                                (Vector2.add location
+                                                    (Vector2.scale (-10 * virtualDelta) f)
+                                                )
+                                                entity
+                            )
+                            model.cluster
+
+                forces =
+                    model.entities
+                        |> List.foldl
+                            (\entity memo ->
+                                case force model.cluster entity of
+                                    Nothing ->
+                                        memo
+
+                                    Just f ->
+                                        ( entity, f ) :: memo
+                            )
+                            []
+
+                virtualDelta : Float
+                virtualDelta =
+                    min 32 delta
+            in
+            ( { model
+                | cluster = cluster
+              }
+            , Cmd.none
+            )
 
         Click location ->
             ( model
@@ -158,6 +216,37 @@ update msg model =
             )
 
 
+force : Cluster -> Entity -> Maybe Vec2
+force cluster entity =
+    let
+        forces : Vec2 -> ( Vec2, List Entity ) -> Vec2
+        forces location ( clusterLocation, clusterEntities ) =
+            let
+                distance =
+                    Vector2.distanceSquared
+                        location
+                        clusterLocation
+            in
+            if distance == 0 then
+                vec2 0 0
+
+            else
+                Vector2.sub clusterLocation location
+                    |> Vector2.normalize
+                    |> Vector2.scale (toFloat (List.length clusterEntities) / distance)
+    in
+    cluster
+        |> Cluster.location entity
+        |> Maybe.map
+            (\location ->
+                cluster
+                    |> Cluster.clusters 0.9 location
+                    |> List.map (forces location)
+                    |> List.foldl1 Vector2.add
+                    |> Maybe.withDefault (vec2 0 0)
+            )
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.paused then
@@ -174,17 +263,17 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
     Html.div []
-        [ viewScene
-            model.scroll
-            model.area
-            model.selected
-            model.cluster
-        , if model.paused then
+        [ if model.paused then
             Html.button [ Html.Events.onClick Play ] [ Html.text "Play" ]
 
           else
             Html.button [ Html.Events.onClick Pause ] [ Html.text "Pause" ]
         , Html.button [ Html.Events.onClick (Animate 16) ] [ Html.text "Step" ]
+        , viewScene
+            model.scroll
+            model.area
+            model.selected
+            model.cluster
         ]
 
 
@@ -229,38 +318,12 @@ viewScene scroll area selected cluster =
 viewCluster : Vec2 -> Cluster -> Svg Msg
 viewCluster translation cluster =
     case cluster of
-        Cluster.Empty viewport ->
-            Svg.rect
-                [ viewport
-                    |> String.fromFloat
-                    |> Svg.Attributes.width
-                , viewport
-                    |> String.fromFloat
-                    |> Svg.Attributes.height
-                , Svg.Attributes.stroke "white"
-                , Svg.Attributes.strokeWidth "1"
-                , Svg.Attributes.fill "none"
-                , translation
-                    |> Transformation.Translate
-                    |> Transformation.toString
-                    |> Svg.Attributes.transform
-                ]
-                []
+        Cluster.Empty _ ->
+            Svg.g [] []
 
-        Cluster.Singleton viewport entities location ->
-            Svg.rect
-                [ viewport
-                    |> String.fromFloat
-                    |> Svg.Attributes.width
-                , viewport
-                    |> String.fromFloat
-                    |> Svg.Attributes.height
-                , Svg.Attributes.stroke "green"
-                , Svg.Attributes.strokeWidth "1"
-                , Svg.Attributes.fill "none"
-                ]
-                []
-                :: List.map (viewEntity location) entities
+        Cluster.Singleton _ entities location ->
+            entities
+                |> List.map (viewEntity location)
                 |> Svg.g
                     [ translation
                         |> Transformation.Translate
