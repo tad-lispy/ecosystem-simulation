@@ -3,7 +3,7 @@ module Transformation exposing
     , toString
     )
 
-import Math.Vector2 as Vector2 exposing (Vec2)
+import AltMath.Vector2 as Vector2 exposing (Vec2)
 
 
 type Transformation

@@ -6,8 +6,8 @@ module Cluster exposing
     , remove
     )
 
+import AltMath.Vector2 as Vector2 exposing (Vec2, vec2)
 import IntDict exposing (IntDict)
-import Math.Vector2 as Vector2 exposing (Vec2, vec2)
 
 
 type Cluster

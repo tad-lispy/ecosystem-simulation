@@ -1,19 +1,19 @@
 module Main exposing (main)
 
+import AltMath.Vector2 as Vector2 exposing (Vec2, vec2)
 import Basics.Extra exposing (uncurry)
 import Browser
 import Browser.Dom as Dom
 import Browser.Events
 import Circle2d
 import Cluster exposing (Cluster)
-import Geometry.Interop.LinearAlgebra.Point2d as Point2d
 import Geometry.Svg
 import Html exposing (Html)
 import Html.Events
 import Json.Decode as Decode exposing (Decoder)
 import List.Extra as List
-import Math.Vector2 as Vector2 exposing (Vec2, vec2)
 import Maybe.Extra as Maybe
+import Point2d
 import Result.Extra as Result
 import Svg exposing (Svg)
 import Svg.Attributes
@@ -58,7 +58,7 @@ init : flags -> ( Model, Cmd Msg )
 init _ =
     let
         entities =
-            List.range 0 199
+            List.range 0 399
     in
     ( { cluster =
             entities
@@ -66,10 +66,10 @@ init _ =
                     (\entity memo ->
                         let
                             x =
-                                modBy 20 entity * 10 + 400 |> toFloat
+                                modBy 20 entity * 10 + 200 |> toFloat
 
                             y =
-                                (entity // 20) * 10 + 400 |> toFloat
+                                (entity // 20) * 10 + 200 |> toFloat
                         in
                         Cluster.insert (vec2 x y) entity memo
                     )
@@ -388,8 +388,10 @@ viewEntity location entity =
         removeDecoder =
             Decode.succeed ( Remove entity, True )
     in
-    location
-        |> Point2d.fromVec2
+    ( Vector2.getX location
+    , Vector2.getY location
+    )
+        |> Point2d.fromCoordinates
         |> Circle2d.withRadius 3
         |> Geometry.Svg.circle2d
             [ Svg.Attributes.fill "red"
