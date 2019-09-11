@@ -1,0 +1,25 @@
+image: node:11
+
+dist:
+  stage: build
+
+  script:
+    - make
+
+  artifacts:
+    name: ${CI_COMMIT_REF_SLUG}
+    expire_in: 1 week
+    paths:
+      - dist/
+
+pages:
+  stage: deploy
+  script:
+    - mv dist/ public/
+
+  artifacts:
+    paths:
+      - public/
+
+  only:
+    - master
