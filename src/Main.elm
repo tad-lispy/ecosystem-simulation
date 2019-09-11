@@ -66,10 +66,10 @@ init _ =
                     (\entity memo ->
                         let
                             x =
-                                modBy 20 entity * 40 + 200 |> toFloat
+                                modBy 20 entity * 10 + 400 |> toFloat
 
                             y =
-                                (entity // 20) * 40 + 200 |> toFloat
+                                (entity // 20) * 10 + 400 |> toFloat
                         in
                         Cluster.insert (vec2 x y) entity memo
                     )
@@ -133,7 +133,10 @@ update msg model =
 
                 virtualDelta : Float
                 virtualDelta =
-                    min 32 delta
+                    -- If the frame rate drops below 30fps then slow down the
+                    -- animation but retain precision. Otherwise there is too
+                    -- much noise and things get wild.
+                    min delta 32
             in
             ( { model
                 | cluster = cluster
@@ -399,20 +402,46 @@ viewEntity location entity =
 
 viewRelation : ( Vec2, List Entity ) -> Svg Msg
 viewRelation ( vector, entities ) =
-    Svg.line
-        [ Svg.Attributes.x1 "0"
-        , Svg.Attributes.y1 "0"
-        , Svg.Attributes.x2
-            (vector
-                |> Vector2.getX
-                |> String.fromFloat
-            )
-        , Svg.Attributes.y2
-            (vector
-                |> Vector2.getY
-                |> String.fromFloat
-            )
-        , Svg.Attributes.stroke "white"
-        , Svg.Attributes.strokeWidth "1"
+    Svg.g []
+        [ Svg.line
+            [ Svg.Attributes.x1 "0"
+            , Svg.Attributes.y1 "0"
+            , Svg.Attributes.x2
+                (vector
+                    |> Vector2.getX
+                    |> String.fromFloat
+                )
+            , Svg.Attributes.y2
+                (vector
+                    |> Vector2.getY
+                    |> String.fromFloat
+                )
+            , Svg.Attributes.stroke "white"
+            , Svg.Attributes.strokeWidth "1"
+            ]
+            []
+        , Svg.circle
+            [ Svg.Attributes.cx
+                (vector
+                    |> Vector2.getX
+                    |> String.fromFloat
+                )
+            , Svg.Attributes.cy
+                (vector
+                    |> Vector2.getY
+                    |> String.fromFloat
+                )
+            , Svg.Attributes.r
+                (entities
+                    |> List.length
+                    |> toFloat
+                    |> logBase 3
+                    |> (*) 3
+                    |> String.fromFloat
+                )
+            , Svg.Attributes.stroke "white"
+            , Svg.Attributes.strokeWidth "1"
+            , Svg.Attributes.fill "black"
+            ]
+            []
         ]
-        []
