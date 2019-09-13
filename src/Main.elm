@@ -21,6 +21,18 @@ import Task exposing (Task)
 import Transformation exposing (Transformation)
 
 
+constants =
+    { universeSize = 3000
+    , entityMass = 0.01
+    , minForce = -0.001
+    , repulsionMagnitude = 1.5
+    , repulsionScale = 100
+    , attractionMagnitude = 1
+    , attractionScale = 1
+    , maxDelta = 32
+    }
+
+
 main : Program Flags Model Msg
 main =
     Browser.element
@@ -49,39 +61,25 @@ type alias Entity =
     Int
 
 
-universeSize : Float
-universeSize =
-    1000
-
-
 init : flags -> ( Model, Cmd Msg )
 init _ =
     let
-        entities =
-            List.range 0 399
+        ( entities, cluster ) =
+            grid 20 20 100
     in
-    ( { cluster =
-            entities
-                |> List.foldl
-                    (\entity memo ->
-                        let
-                            x =
-                                modBy 20 entity * 10 + 200 |> toFloat
-
-                            y =
-                                (entity // 20) * 10 + 200 |> toFloat
-                        in
-                        Cluster.insert (vec2 x y) entity memo
-                    )
-                    (Cluster.Empty universeSize)
+    ( { cluster = cluster
       , paused = True
       , selected = Nothing
-      , area = vec2 (universeSize + 200) (universeSize + 200)
+      , area = vec2 (constants.universeSize + 200) (constants.universeSize + 200)
       , scroll = vec2 -100 -100
       , entities = entities
       }
     , Cmd.none
     )
+
+
+
+-- UPDATE
 
 
 type Msg
@@ -112,7 +110,10 @@ update msg model =
                                             |> Cluster.remove entity
                                             |> Cluster.insert
                                                 (Vector2.add location
-                                                    (Vector2.scale (-10 * virtualDelta) f)
+                                                    (Vector2.scale
+                                                        (virtualDelta / constants.entityMass)
+                                                        f
+                                                    )
                                                 )
                                                 entity
                             )
@@ -136,7 +137,7 @@ update msg model =
                     -- If the frame rate drops below 30fps then slow down the
                     -- animation but retain precision. Otherwise there is too
                     -- much noise and things get wild.
-                    min delta 32
+                    min delta constants.maxDelta
             in
             ( { model
                 | cluster = cluster
@@ -219,37 +220,6 @@ update msg model =
             )
 
 
-force : Cluster -> Entity -> Maybe Vec2
-force cluster entity =
-    let
-        forces : Vec2 -> ( Vec2, List Entity ) -> Vec2
-        forces location ( clusterLocation, clusterEntities ) =
-            let
-                distance =
-                    Vector2.distanceSquared
-                        location
-                        clusterLocation
-            in
-            if distance == 0 then
-                vec2 0 0
-
-            else
-                Vector2.sub clusterLocation location
-                    |> Vector2.normalize
-                    |> Vector2.scale (toFloat (List.length clusterEntities) / distance)
-    in
-    cluster
-        |> Cluster.location entity
-        |> Maybe.map
-            (\location ->
-                cluster
-                    |> Cluster.clusters 0.9 location
-                    |> List.map (forces location)
-                    |> List.foldl1 Vector2.add
-                    |> Maybe.withDefault (vec2 0 0)
-            )
-
-
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.paused then
@@ -260,7 +230,7 @@ subscriptions model =
 
 
 
--- Sub.none
+-- VIEW
 
 
 view : Model -> Html Msg
@@ -447,3 +417,98 @@ viewRelation ( vector, entities ) =
             ]
             []
         ]
+
+
+
+-- HELPERS
+
+
+grid : Int -> Int -> Float -> ( List Int, Cluster )
+grid rows cols distance =
+    let
+        width =
+            distance * toFloat rows
+
+        height =
+            distance * toFloat rows
+
+        xOffset =
+            (constants.universeSize - width) / 2
+
+        yOffset =
+            (constants.universeSize - height) / 2
+
+        entities =
+            List.range 0 (rows * cols - 1)
+
+        cluster =
+            entities
+                |> List.foldl
+                    (\entity memo ->
+                        let
+                            x =
+                                modBy cols entity
+                                    |> toFloat
+                                    |> (*) distance
+                                    |> (+) xOffset
+
+                            y =
+                                (entity // cols)
+                                    |> toFloat
+                                    |> (*) distance
+                                    |> (+) yOffset
+                        in
+                        Cluster.insert (vec2 x y) entity memo
+                    )
+                    (Cluster.Empty constants.universeSize)
+    in
+    ( entities, cluster )
+
+
+force : Cluster -> Entity -> Maybe Vec2
+force cluster entity =
+    let
+        addInfluence : Vec2 -> ( Vec2, List Entity ) -> Vec2 -> Vec2
+        addInfluence location ( clusterLocation, clusterEntities ) influence =
+            let
+                distance =
+                    Vector2.distanceSquared
+                        location
+                        clusterLocation
+
+                clusterCharge =
+                    clusterEntities
+                        |> List.length
+                        |> toFloat
+
+                attraction =
+                    (constants.attractionScale * clusterCharge)
+                        / (distance ^ constants.attractionMagnitude)
+
+                repulsion =
+                    (constants.repulsionScale * clusterCharge)
+                        / (distance ^ constants.repulsionMagnitude)
+
+                strength =
+                    (attraction - repulsion)
+                        |> max constants.minForce
+            in
+            if distance == 0 then
+                influence
+
+            else
+                Vector2.sub clusterLocation location
+                    |> Vector2.normalize
+                    |> Vector2.scale strength
+                    |> Vector2.add influence
+    in
+    cluster
+        |> Cluster.location entity
+        |> Maybe.map
+            (\location ->
+                cluster
+                    |> Cluster.clusters 0.9 location
+                    |> List.foldl
+                        (addInfluence location)
+                        (vec2 0 0)
+            )
