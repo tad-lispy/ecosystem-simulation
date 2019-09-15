@@ -15,5 +15,7 @@
     "parcel": "^1.12.3",
     "serve": "^11.1.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "elm-debug-transformer": "^1.0.1"
+  }
 }
