@@ -8,11 +8,12 @@ module Cluster exposing
 
 import AltMath.Vector2 as Vector2 exposing (Vec2, vec2)
 import IntDict exposing (IntDict)
+import Set exposing (Set)
 
 
 type Cluster
     = Empty Float
-    | Singleton Float (List Entity) Vec2
+    | Singleton Float (Set Entity) Vec2
     | Cluster Float (IntDict Vec2) SubClusters
 
 
@@ -34,12 +35,15 @@ insert position entity cluster =
         Empty size ->
             Singleton
                 size
-                [ entity ]
+                (Set.singleton entity)
                 position
 
         Singleton size existingEntities existingPoint ->
             if existingPoint == position then
-                Singleton size (entity :: existingEntities) existingPoint
+                Singleton
+                    size
+                    (Set.insert entity existingEntities)
+                    existingPoint
 
             else
                 let
@@ -60,7 +64,7 @@ insert position entity cluster =
                         Empty (size / 2)
                 in
                 existingEntities
-                    |> List.foldl
+                    |> Set.foldl
                         (\existingEntity memo ->
                             insert existingPoint existingEntity memo
                         )
@@ -131,12 +135,15 @@ remove entity cluster =
             cluster
 
         Singleton size existingEntities position ->
-            case List.filter ((/=) entity) existingEntities of
-                [] ->
-                    Empty size
+            let
+                rest =
+                    Set.remove entity existingEntities
+            in
+            if Set.isEmpty rest then
+                Empty size
 
-                rest ->
-                    Singleton size rest position
+            else
+                Singleton size rest position
 
         Cluster size entities existingSubClusters ->
             case IntDict.get entity entities of
@@ -160,7 +167,7 @@ remove entity cluster =
                             -- and I assume it's a rare situation. So collapse
                             -- will happen only when there is only one entity
                             -- left.
-                            Singleton size [ lastEntity ] lastPosition
+                            Singleton size (Set.singleton lastEntity) lastPosition
 
                         _ ->
                             let
@@ -211,7 +218,7 @@ location entity cluster =
             Nothing
 
         Singleton _ entities position ->
-            if List.member entity entities then
+            if Set.member entity entities then
                 Just position
 
             else
@@ -228,7 +235,7 @@ clusters precision viewpoint cluster =
             []
 
         Singleton _ entities position ->
-            [ ( position, entities ) ]
+            [ ( position, Set.toList entities ) ]
 
         Cluster size entities subClusters ->
             let

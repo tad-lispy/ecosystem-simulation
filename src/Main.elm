@@ -6,7 +6,6 @@ import Browser
 import Browser.Dom as Dom
 import Browser.Events
 import Circle2d
-import Cluster exposing (Cluster)
 import Geometry.Svg
 import Html exposing (Html)
 import Html.Events
@@ -15,6 +14,7 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Point2d
 import Result.Extra as Result
+import Surface exposing (Surface)
 import Svg exposing (Svg)
 import Svg.Attributes
 import Task exposing (Task)
@@ -30,6 +30,7 @@ constants =
     , attractionMagnitude = 1
     , attractionScale = 1
     , maxDelta = 32
+    , clusteringPrecision = 0.9
     }
 
 
@@ -48,12 +49,11 @@ type alias Flags =
 
 
 type alias Model =
-    { cluster : Cluster
+    { surface : Surface
     , entities : List Entity
     , selected : Maybe Entity
     , paused : Bool
     , area : Vec2
-    , scroll : Vec2
     }
 
 
@@ -64,14 +64,13 @@ type alias Entity =
 init : flags -> ( Model, Cmd Msg )
 init _ =
     let
-        ( entities, cluster ) =
-            grid 20 20 100
+        ( entities, surface ) =
+            Surface.grid 20 20 317 constants.universeSize
     in
-    ( { cluster = cluster
+    ( { surface = surface
       , paused = True
       , selected = Nothing
-      , area = vec2 (constants.universeSize + 200) (constants.universeSize + 200)
-      , scroll = vec2 -100 -100
+      , area = vec2 constants.universeSize constants.universeSize
       , entities = entities
       }
     , Cmd.none
@@ -97,33 +96,31 @@ update msg model =
     case msg of
         Animate delta ->
             let
-                cluster =
+                surface =
                     forces
                         |> List.foldl
                             (\( entity, f ) memo ->
-                                case Cluster.location entity memo of
-                                    Nothing ->
-                                        memo
-
-                                    Just location ->
-                                        memo
-                                            |> Cluster.remove entity
-                                            |> Cluster.insert
-                                                (Vector2.add location
-                                                    (Vector2.scale
-                                                        (virtualDelta / constants.entityMass)
-                                                        f
-                                                    )
-                                                )
-                                                entity
+                                let
+                                    movement =
+                                        Vector2.scale
+                                            (virtualDelta / constants.entityMass)
+                                            f
+                                in
+                                memo
+                                    |> Surface.shiftTo entity
+                                    |> Maybe.map
+                                        (Surface.shift movement
+                                            >> Surface.place entity
+                                        )
+                                    |> Maybe.withDefault memo
                             )
-                            model.cluster
+                            model.surface
 
                 forces =
                     model.entities
                         |> List.foldl
                             (\entity memo ->
-                                case force model.cluster entity of
+                                case force model.surface entity of
                                     Nothing ->
                                         memo
 
@@ -140,7 +137,7 @@ update msg model =
                     min delta constants.maxDelta
             in
             ( { model
-                | cluster = cluster
+                | surface = surface
               }
             , Cmd.none
             )
@@ -171,7 +168,6 @@ update msg model =
                             * Vector2.getX model.area
                             / dom.element.height
                         )
-                        |> Vector2.add model.scroll
 
                 offset =
                     Vector2.sub globalOffset element
@@ -188,16 +184,16 @@ update msg model =
             ( { model
                 | entities =
                     entity :: model.entities
-                , cluster =
-                    Cluster.insert location entity model.cluster
+                , surface =
+                    Surface.place entity model.surface
               }
             , Cmd.none
             )
 
         Remove entity ->
             ( { model
-                | cluster =
-                    Cluster.remove entity model.cluster
+                | surface =
+                    Surface.remove entity model.surface
               }
             , Cmd.none
             )
@@ -235,28 +231,43 @@ subscriptions model =
 
 view : Model -> Html Msg
 view model =
-    Html.div []
-        [ if model.paused then
-            Html.button [ Html.Events.onClick Play ] [ Html.text "Play" ]
+    let
+        controls =
+            Html.div []
+                [ if model.paused then
+                    Html.button [ Html.Events.onClick Play ] [ Html.text "Play" ]
 
-          else
-            Html.button [ Html.Events.onClick Pause ] [ Html.text "Pause" ]
-        , Html.button [ Html.Events.onClick (Animate 16) ] [ Html.text "Step" ]
-        , viewScene
-            model.scroll
-            model.area
-            model.selected
-            model.cluster
+                  else
+                    Html.button [ Html.Events.onClick Pause ] [ Html.text "Pause" ]
+                , Html.button [ Html.Events.onClick (Animate 16) ] [ Html.text "Step" ]
+                ]
+
+        scene =
+            viewScene
+                model.area
+                model.selected
+                model.surface
+
+        selection =
+            case model.selected of
+                Just entity ->
+                    viewSelection entity model.surface
+
+                Nothing ->
+                    Html.div [] []
+    in
+    Html.div []
+        [ controls
+        , Html.div [] [ scene, selection ]
         ]
 
 
 viewScene :
     Vec2
-    -> Vec2
     -> Maybe Entity
-    -> Cluster
+    -> Surface
     -> Svg Msg
-viewScene scroll area selected cluster =
+viewScene area selected surface =
     let
         mousePositionDecoder : (Vec2 -> Msg) -> Decoder Msg
         mousePositionDecoder callback =
@@ -267,20 +278,20 @@ viewScene scroll area selected cluster =
                 |> Decode.map callback
 
         viewbox =
-            [ Vector2.getX scroll
-            , Vector2.getY scroll
+            [ 0
+            , 0
             , Vector2.getX area
             , Vector2.getY area
             ]
                 |> List.map String.fromFloat
                 |> String.join " "
     in
-    [ viewSelection selected cluster
-    , viewCluster (vec2 0 0) cluster
-    ]
+    surface
+        |> Surface.render (Vector2.getX area) (Vector2.getY area)
+        |> List.map viewEntity
         |> Svg.svg
-            [ Svg.Attributes.width "100%"
-            , Svg.Attributes.height "100%"
+            [ Svg.Attributes.width "50%"
+            , Svg.Attributes.height "50%"
             , Svg.Attributes.style "background: black; cursor: crosshair"
             , Svg.Attributes.viewBox viewbox
             , Html.Events.on "click" (mousePositionDecoder Click)
@@ -288,92 +299,50 @@ viewScene scroll area selected cluster =
             ]
 
 
-viewCluster : Vec2 -> Cluster -> Svg Msg
-viewCluster translation cluster =
-    case cluster of
-        Cluster.Empty _ ->
-            Svg.g [] []
+viewSelection : Entity -> Surface -> Svg Msg
+viewSelection entity universe =
+    Svg.svg
+        [ Svg.Attributes.width "50%"
+        , Svg.Attributes.height "50%"
+        , Svg.Attributes.style "background: black"
+        , Svg.Attributes.viewBox "-500 -500 1000 1000"
+        , Svg.Attributes.id "selection"
+        ]
+    <|
+        case Surface.shiftTo entity universe of
+            Nothing ->
+                []
 
-        Cluster.Singleton _ entities location ->
-            entities
-                |> List.map (viewEntity location)
-                |> Svg.g
-                    [ translation
-                        |> Transformation.Translate
-                        |> Transformation.toString
-                        |> Svg.Attributes.transform
-                    ]
-
-        Cluster.Cluster viewport _ subClusters ->
-            [ subClusters.topLeft
-                |> viewCluster (vec2 0 0)
-            , subClusters.topRight
-                |> viewCluster (vec2 (viewport / 2) 0)
-            , subClusters.bottomLeft
-                |> viewCluster (vec2 0 (viewport / 2))
-            , subClusters.bottomRight
-                |> viewCluster (vec2 (viewport / 2) (viewport / 2))
-            ]
-                |> Svg.g
-                    [ translation
-                        |> Transformation.Translate
-                        |> Transformation.toString
-                        |> Svg.Attributes.transform
-                    ]
+            Just surface ->
+                surface
+                    |> Surface.clusters constants.clusteringPrecision
+                    |> List.map viewInfluence
 
 
-viewSelection : Maybe Entity -> Cluster -> Svg Msg
-viewSelection selected cluster =
-    case selected of
-        Nothing ->
-            Svg.g [] []
-
-        Just entity ->
-            case Cluster.location entity cluster of
-                Nothing ->
-                    Svg.g [] []
-
-                Just location ->
-                    cluster
-                        |> Cluster.clusters 0.9 location
-                        |> List.map
-                            (Tuple.mapFirst
-                                (\otherLocation ->
-                                    Vector2.sub otherLocation location
-                                )
-                            )
-                        |> List.map viewRelation
-                        |> Svg.g
-                            [ location
-                                |> Transformation.Translate
-                                |> Transformation.toString
-                                |> Svg.Attributes.transform
-                            ]
-
-
-viewEntity : Vec2 -> Entity -> Svg Msg
-viewEntity location entity =
+viewEntity : ( Entity, Vec2 ) -> Svg Msg
+viewEntity ( entity, position ) =
     let
         removeDecoder : Decoder ( Msg, Bool )
         removeDecoder =
             Decode.succeed ( Remove entity, True )
+
+        selectionDecoder =
+            Decode.succeed ( Select <| Just entity, True )
     in
-    ( Vector2.getX location
-    , Vector2.getY location
+    ( Vector2.getX position
+    , Vector2.getY position
     )
         |> Point2d.fromCoordinates
-        |> Circle2d.withRadius 3
+        |> Circle2d.withRadius 10
         |> Geometry.Svg.circle2d
             [ Svg.Attributes.fill "red"
             , Svg.Attributes.style "cursor: pointer"
-            , Html.Events.stopPropagationOn "click" removeDecoder
-            , Html.Events.onMouseEnter (Select <| Just entity)
-            , Html.Events.onMouseLeave (Select Nothing)
+            , Html.Events.stopPropagationOn "click" selectionDecoder
             ]
 
 
-viewRelation : ( Vec2, List Entity ) -> Svg Msg
-viewRelation ( vector, entities ) =
+viewInfluence : ( Vec2, List Entity ) -> Svg Msg
+viewInfluence ( vector, entities ) =
     Svg.g []
         [ Svg.line
             [ Svg.Attributes.x1 "0"
@@ -423,58 +392,14 @@ viewRelation ( vector, entities ) =
 -- HELPERS
 
 
-grid : Int -> Int -> Float -> ( List Int, Cluster )
-grid rows cols distance =
+force : Surface -> Entity -> Maybe Vec2
+force surface entity =
     let
-        width =
-            distance * toFloat rows
-
-        height =
-            distance * toFloat rows
-
-        xOffset =
-            (constants.universeSize - width) / 2
-
-        yOffset =
-            (constants.universeSize - height) / 2
-
-        entities =
-            List.range 0 (rows * cols - 1)
-
-        cluster =
-            entities
-                |> List.foldl
-                    (\entity memo ->
-                        let
-                            x =
-                                modBy cols entity
-                                    |> toFloat
-                                    |> (*) distance
-                                    |> (+) xOffset
-
-                            y =
-                                (entity // cols)
-                                    |> toFloat
-                                    |> (*) distance
-                                    |> (+) yOffset
-                        in
-                        Cluster.insert (vec2 x y) entity memo
-                    )
-                    (Cluster.Empty constants.universeSize)
-    in
-    ( entities, cluster )
-
-
-force : Cluster -> Entity -> Maybe Vec2
-force cluster entity =
-    let
-        addInfluence : Vec2 -> ( Vec2, List Entity ) -> Vec2 -> Vec2
-        addInfluence location ( clusterLocation, clusterEntities ) influence =
+        addInfluence : ( Vec2, List Entity ) -> Vec2 -> Vec2
+        addInfluence ( clusterPosition, clusterEntities ) influence =
             let
                 distance =
-                    Vector2.distanceSquared
-                        location
-                        clusterLocation
+                    Vector2.lengthSquared clusterPosition
 
                 clusterCharge =
                     clusterEntities
@@ -497,18 +422,14 @@ force cluster entity =
                 influence
 
             else
-                Vector2.sub clusterLocation location
+                clusterPosition
                     |> Vector2.normalize
                     |> Vector2.scale strength
                     |> Vector2.add influence
     in
-    cluster
-        |> Cluster.location entity
+    surface
+        |> Surface.shiftTo entity
         |> Maybe.map
-            (\location ->
-                cluster
-                    |> Cluster.clusters 0.9 location
-                    |> List.foldl
-                        (addInfluence location)
-                        (vec2 0 0)
+            (Surface.clusters constants.clusteringPrecision
+                >> List.foldl addInfluence (vec2 0 0)
             )
