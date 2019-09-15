@@ -22,13 +22,13 @@ import Transformation exposing (Transformation)
 
 
 constants =
-    { universeSize = 3000
+    { universeSize = 2000
     , entityMass = 0.01
     , minForce = -0.001
     , repulsionMagnitude = 1.5
-    , repulsionScale = 100
+    , repulsionScale = 15
     , attractionMagnitude = 1
-    , attractionScale = 1
+    , attractionScale = -1
     , maxDelta = 32
     , clusteringPrecision = 0.9
     }
@@ -65,7 +65,7 @@ init : flags -> ( Model, Cmd Msg )
 init _ =
     let
         ( entities, surface ) =
-            Surface.grid 20 20 317 constants.universeSize
+            Surface.grid 17 17 173 constants.universeSize
     in
     ( { surface = surface
       , paused = True
@@ -328,6 +328,13 @@ viewEntity ( entity, position ) =
 
         selectionDecoder =
             Decode.succeed ( Select <| Just entity, True )
+
+        color =
+            if modBy 2 entity == 0 then
+                "blue"
+
+            else
+                "red"
     in
     ( Vector2.getX position
     , Vector2.getY position
@@ -335,7 +342,7 @@ viewEntity ( entity, position ) =
         |> Point2d.fromCoordinates
         |> Circle2d.withRadius 10
         |> Geometry.Svg.circle2d
-            [ Svg.Attributes.fill "red"
+            [ Svg.Attributes.fill color
             , Svg.Attributes.style "cursor: pointer"
             , Html.Events.stopPropagationOn "click" selectionDecoder
             ]
@@ -392,9 +399,21 @@ viewInfluence ( vector, entities ) =
 -- HELPERS
 
 
+charge entity =
+    if modBy 2 entity == 0 then
+        1
+
+    else
+        -1
+
+
 force : Surface -> Entity -> Maybe Vec2
 force surface entity =
     let
+        addCharge : Entity -> Float -> Float
+        addCharge item memo =
+            memo + charge item
+
         addInfluence : ( Vec2, List Entity ) -> Vec2 -> Vec2
         addInfluence ( clusterPosition, clusterEntities ) influence =
             let
@@ -403,15 +422,14 @@ force surface entity =
 
                 clusterCharge =
                     clusterEntities
-                        |> List.length
-                        |> toFloat
+                        |> List.foldl addCharge 0
 
                 attraction =
                     (constants.attractionScale * clusterCharge)
                         / (distance ^ constants.attractionMagnitude)
 
                 repulsion =
-                    (constants.repulsionScale * clusterCharge)
+                    constants.repulsionScale
                         / (distance ^ constants.repulsionMagnitude)
 
                 strength =
