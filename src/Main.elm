@@ -96,6 +96,7 @@ update msg model =
     case msg of
         Animate delta ->
             let
+                -- 36.5% of CPU time is spent here
                 surface =
                     forces
                         |> List.foldl
@@ -116,6 +117,7 @@ update msg model =
                             )
                             model.surface
 
+                -- 39.5% of CPU time is spent here
                 forces =
                     model.entities
                         |> List.foldl
