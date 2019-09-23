@@ -13,11 +13,11 @@ import Set exposing (Set)
 
 type Cluster
     = Empty Float
-    | Singleton Float (Set Entity) Vec2
+    | Singleton Float (Set Id) Vec2
     | Cluster Float (IntDict Vec2) SubClusters
 
 
-type alias Entity =
+type alias Id =
     Int
 
 
@@ -29,20 +29,20 @@ type alias SubClusters =
     }
 
 
-insert : Vec2 -> Entity -> Cluster -> Cluster
-insert position entity cluster =
+insert : Vec2 -> Id -> Cluster -> Cluster
+insert position id cluster =
     case cluster of
         Empty size ->
             Singleton
                 size
-                (Set.singleton entity)
+                (Set.singleton id)
                 position
 
         Singleton size existingEntities existingPoint ->
             if existingPoint == position then
                 Singleton
                     size
-                    (Set.insert entity existingEntities)
+                    (Set.insert id existingEntities)
                     existingPoint
 
             else
@@ -69,7 +69,7 @@ insert position entity cluster =
                             insert existingPoint existingEntity memo
                         )
                         emptyCluster
-                    |> insert position entity
+                    |> insert position id
 
         Cluster size entities existingSubClusters ->
             let
@@ -83,7 +83,7 @@ insert position entity cluster =
                             { existingSubClusters
                                 | topLeft =
                                     existingSubClusters.topLeft
-                                        |> insert position entity
+                                        |> insert position id
                             }
 
                         ( False, True ) ->
@@ -94,7 +94,7 @@ insert position entity cluster =
                             { existingSubClusters
                                 | topRight =
                                     existingSubClusters.topRight
-                                        |> insert (Vector2.setX x position) entity
+                                        |> insert (Vector2.setX x position) id
                             }
 
                         ( True, False ) ->
@@ -105,7 +105,7 @@ insert position entity cluster =
                             { existingSubClusters
                                 | bottomLeft =
                                     existingSubClusters.bottomLeft
-                                        |> insert (Vector2.setY y position) entity
+                                        |> insert (Vector2.setY y position) id
                             }
 
                         ( False, False ) ->
@@ -119,17 +119,17 @@ insert position entity cluster =
                             { existingSubClusters
                                 | bottomRight =
                                     existingSubClusters.bottomRight
-                                        |> insert (vec2 x y) entity
+                                        |> insert (vec2 x y) id
                             }
             in
             Cluster
                 size
-                (IntDict.insert entity position entities)
+                (IntDict.insert id position entities)
                 subClusters
 
 
-remove : Entity -> Cluster -> Cluster
-remove entity cluster =
+remove : Id -> Cluster -> Cluster
+remove id cluster =
     case cluster of
         Empty _ ->
             cluster
@@ -137,7 +137,7 @@ remove entity cluster =
         Singleton size existingEntities position ->
             let
                 rest =
-                    Set.remove entity existingEntities
+                    Set.remove id existingEntities
             in
             if Set.isEmpty rest then
                 Empty size
@@ -146,14 +146,14 @@ remove entity cluster =
                 Singleton size rest position
 
         Cluster size entities existingSubClusters ->
-            case IntDict.get entity entities of
+            case IntDict.get id entities of
                 Nothing ->
                     cluster
 
                 Just position ->
                     let
                         remainingEntities =
-                            IntDict.remove entity entities
+                            IntDict.remove id entities
                     in
                     case IntDict.toList remainingEntities of
                         [] ->
@@ -181,28 +181,28 @@ remove entity cluster =
                                             { existingSubClusters
                                                 | topLeft =
                                                     existingSubClusters.topLeft
-                                                        |> remove entity
+                                                        |> remove id
                                             }
 
                                         ( False, True ) ->
                                             { existingSubClusters
                                                 | topRight =
                                                     existingSubClusters.topRight
-                                                        |> remove entity
+                                                        |> remove id
                                             }
 
                                         ( True, False ) ->
                                             { existingSubClusters
                                                 | bottomLeft =
                                                     existingSubClusters.bottomLeft
-                                                        |> remove entity
+                                                        |> remove id
                                             }
 
                                         ( False, False ) ->
                                             { existingSubClusters
                                                 | bottomRight =
                                                     existingSubClusters.bottomRight
-                                                        |> remove entity
+                                                        |> remove id
                                             }
                             in
                             Cluster
@@ -211,24 +211,24 @@ remove entity cluster =
                                 subClusters
 
 
-location : Entity -> Cluster -> Maybe Vec2
-location entity cluster =
+location : Id -> Cluster -> Maybe Vec2
+location id cluster =
     case cluster of
         Empty _ ->
             Nothing
 
         Singleton _ entities position ->
-            if Set.member entity entities then
+            if Set.member id entities then
                 Just position
 
             else
                 Nothing
 
         Cluster _ entities _ ->
-            IntDict.get entity entities
+            IntDict.get id entities
 
 
-clusters : Float -> Vec2 -> Cluster -> List ( Vec2, List Entity )
+clusters : Float -> Vec2 -> Cluster -> List ( Vec2, List Id )
 clusters precision viewpoint cluster =
     case cluster of
         Empty _ ->
