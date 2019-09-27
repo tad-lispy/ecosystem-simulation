@@ -15,8 +15,12 @@ import Browser.Events
 import Color exposing (Color)
 import Element exposing (Element)
 import Html exposing (Html)
+import Html.Attributes
 import IntDict exposing (IntDict)
 import List.Extra as List
+import Svg exposing (Svg)
+import Svg.Attributes
+import Transformation exposing (Transformation)
 import WrappedPlane exposing (Plane)
 
 
@@ -29,7 +33,7 @@ simulation setup =
         main =
             Browser.element
                 { init = init setup
-                , view = view
+                , view = view setup
                 , update = update
                 , subscriptions = subscriptions
                 }
@@ -120,7 +124,10 @@ init setup _ =
                 Just entity ->
                     { model
                         | surface =
-                            WrappedPlane.place id entity model.surface
+                            model.surface
+                                |> WrappedPlane.shift movement
+                                |> WrappedPlane.place id entity
+                                |> WrappedPlane.return
                         , interactions =
                             List.foldl
                                 (registerInteraction id)
@@ -169,11 +176,55 @@ update msg model =
 
 
 subscriptions : Model entity action -> Sub Msg
-subscriptions model =
+subscriptions _ =
     Browser.Events.onAnimationFrameDelta Animate
 
 
-view : Model entity action -> Html Msg
-view model =
-    Element.text "Hello, System!"
-        |> Element.layout []
+view : Setup entity action -> Model entity action -> Html Msg
+view setup model =
+    model
+        |> paintScene setup
+        |> Svg.svg
+            [ Html.Attributes.style "width" "100%"
+            , Html.Attributes.style "height" "100%"
+            , Svg.Attributes.viewBox "-250 -250 500 500"
+            , Html.Attributes.style "background" <|
+                Color.toCssString <|
+                    Color.darkBlue
+            ]
+        |> Element.html
+        |> Element.layout
+            [ Element.width Element.fill
+            , Element.height Element.fill
+            ]
+
+
+paintScene : Setup entity action -> Model entity action -> List (Svg Msg)
+paintScene setup model =
+    model.surface
+        |> WrappedPlane.render 500 500
+        |> List.map (paintEntity setup)
+
+
+paintEntity : Setup entity action -> ( Id, entity, Vec2 ) -> Svg Msg
+paintEntity setup ( id, entity, position ) =
+    let
+        image =
+            setup.view entity
+    in
+    Svg.circle
+        [ image.size
+            |> String.fromFloat
+            |> Svg.Attributes.r
+        , image.fill
+            |> Color.toCssString
+            |> Svg.Attributes.fill
+        , image.stroke
+            |> Color.toCssString
+            |> Svg.Attributes.stroke
+        , position
+            |> Transformation.Translate
+            |> Transformation.toString
+            |> Svg.Attributes.transform
+        ]
+        []

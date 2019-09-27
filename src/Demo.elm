@@ -41,7 +41,7 @@ init =
       , movement = vec2 -200 200
       , interactions = []
       }
-    , { this = Just Pretton
+    , { this = Just Uglon
       , movement = vec2 0 -160
       , interactions = []
       }
@@ -64,7 +64,15 @@ update id entity interactions groups duration =
 
 view : Entity -> Image
 view entity =
-    { fill = Color.lightRed
-    , stroke = Color.red
-    , size = 5
-    }
+    case entity of
+        Uglon ->
+            { fill = Color.lightYellow
+            , stroke = Color.orange
+            , size = 5
+            }
+
+        Pretton ->
+            { fill = Color.lightBlue
+            , stroke = Color.blue
+            , size = 5
+            }
