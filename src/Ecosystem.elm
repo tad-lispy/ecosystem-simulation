@@ -20,6 +20,7 @@ import IntDict exposing (IntDict)
 import List.Extra as List
 import Svg exposing (Svg)
 import Svg.Attributes
+import Svg.Events
 import Transformation exposing (Transformation)
 import WrappedPlane exposing (Plane)
 
@@ -34,7 +35,7 @@ simulation setup =
             Browser.element
                 { init = init setup
                 , view = view setup
-                , update = update
+                , update = update setup
                 , subscriptions = subscriptions
                 }
     in
@@ -43,11 +44,11 @@ simulation setup =
 
 type alias Setup entity action =
     { update :
-        Id
+        Duration
+        -> Id
         -> entity
         -> List (Interaction action)
         -> List (Group entity)
-        -> Duration
         -> Update entity action
     , init : List (Update entity action)
     , view : entity -> Image
@@ -62,6 +63,7 @@ type alias Flags =
 type alias Model entity action =
     { surface : Plane entity
     , interactions : InteractionsRegister action
+    , paused : Bool
     }
 
 
@@ -76,9 +78,8 @@ type alias Interaction action =
 
 
 type alias Group entity =
-    { members : List ( Id, entity )
-    , position : Vec2
-    }
+    -- Alias and re-expose
+    WrappedPlane.Group entity
 
 
 type alias Image =
@@ -109,6 +110,7 @@ init setup _ =
         empty =
             { surface = WrappedPlane.empty setup.size
             , interactions = IntDict.empty
+            , paused = False
             }
 
         initReducer :
@@ -134,21 +136,6 @@ init setup _ =
                                 model.interactions
                                 interactions
                     }
-
-        registerInteraction :
-            Id
-            -> Interaction action
-            -> InteractionsRegister action
-            -> InteractionsRegister action
-        registerInteraction actor { other, action } register =
-            let
-                interactions =
-                    register
-                        |> IntDict.get other
-                        |> Maybe.withDefault []
-                        |> (::) { other = actor, action = action }
-            in
-            IntDict.insert other interactions register
     in
     ( List.indexedFoldl initReducer empty setup.init
     , Cmd.none
@@ -161,23 +148,84 @@ type alias InteractionsRegister action =
 
 type Msg
     = Animate Float
+    | Pause
 
 
 update :
-    Msg
+    Setup entity action
+    -> Msg
     -> Model entity action
     -> ( Model entity action, Cmd Msg )
-update msg model =
+update setup msg model =
     case msg of
         Animate duration ->
-            ( model
+            let
+                updateReducer :
+                    Id
+                    -> entity
+                    -> Model entity action
+                    -> Model entity action
+                updateReducer id this memo =
+                    let
+                        incomingInteractions =
+                            IntDict.get id model.interactions
+                                |> Maybe.withDefault []
+
+                        surface =
+                            memo.surface
+                                |> WrappedPlane.shiftTo id
+                                |> Maybe.withDefault memo.surface
+                    in
+                    surface
+                        |> WrappedPlane.clusters 0.9
+                        |> setup.update
+                            duration
+                            id
+                            this
+                            incomingInteractions
+                        |> (\entityUpdate ->
+                                case entityUpdate.this of
+                                    Nothing ->
+                                        { memo
+                                            | surface =
+                                                WrappedPlane.remove id memo.surface
+                                            , interactions =
+                                                IntDict.remove id memo.interactions
+                                        }
+
+                                    Just entity ->
+                                        { memo
+                                            | surface =
+                                                surface
+                                                    |> WrappedPlane.shift entityUpdate.movement
+                                                    |> WrappedPlane.place id entity
+                                                    |> WrappedPlane.return
+                                            , interactions =
+                                                List.foldl
+                                                    (registerInteraction id)
+                                                    memo.interactions
+                                                    entityUpdate.interactions
+                                        }
+                           )
+            in
+            ( model.surface
+                |> WrappedPlane.foldl updateReducer model
+            , Cmd.none
+            )
+
+        Pause ->
+            ( { model | paused = True }
             , Cmd.none
             )
 
 
 subscriptions : Model entity action -> Sub Msg
-subscriptions _ =
-    Browser.Events.onAnimationFrameDelta Animate
+subscriptions model =
+    if model.paused then
+        Sub.none
+
+    else
+        Browser.Events.onAnimationFrameDelta Animate
 
 
 view : Setup entity action -> Model entity action -> Html Msg
@@ -188,9 +236,17 @@ view setup model =
             [ Html.Attributes.style "width" "100%"
             , Html.Attributes.style "height" "100%"
             , Svg.Attributes.viewBox "-250 -250 500 500"
+            , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
             , Html.Attributes.style "background" <|
                 Color.toCssString <|
                     Color.darkBlue
+            , Svg.Events.onClick
+                (if model.paused then
+                    Animate 16
+
+                 else
+                    Pause
+                )
             ]
         |> Element.html
         |> Element.layout
@@ -228,3 +284,23 @@ paintEntity setup ( id, entity, position ) =
             |> Svg.Attributes.transform
         ]
         []
+
+
+
+-- Helpers
+
+
+registerInteraction :
+    Id
+    -> Interaction action
+    -> InteractionsRegister action
+    -> InteractionsRegister action
+registerInteraction actor { other, action } register =
+    let
+        interactions =
+            register
+                |> IntDict.get other
+                |> Maybe.withDefault []
+                |> (::) { other = actor, action = action }
+    in
+    IntDict.insert other interactions register

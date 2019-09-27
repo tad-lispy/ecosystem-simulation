@@ -1,9 +1,11 @@
 module WrappedPlane exposing
-    ( Id
+    ( Group
+    , Id
     , Plane
     , anchor
     , clusters
     , empty
+    , foldl
     , grid
     , place
     , remove
@@ -33,6 +35,12 @@ type Plane entity
 
 type alias Id =
     Int
+
+
+type alias Group entity =
+    { members : List ( Id, entity )
+    , position : Vec2
+    }
 
 
 empty : Float -> Plane entity
@@ -81,6 +89,12 @@ remove id (Plane this) =
             | cluster =
                 Cluster.remove id this.cluster
         }
+
+
+foldl : (Id -> entity -> a -> a) -> a -> Plane entity -> a
+foldl reducer initial (Plane this) =
+    this.entities
+        |> IntDict.foldl reducer initial
 
 
 render :
@@ -175,7 +189,7 @@ wrap size point =
 clusters :
     Float
     -> Plane entity
-    -> List ( Vec2, List Id )
+    -> List (Group entity)
 clusters precision (Plane universe) =
     let
         internal origin cluster =
@@ -183,10 +197,19 @@ clusters precision (Plane universe) =
                 Empty _ ->
                     []
 
-                Singleton _ entities location ->
-                    [ ( from universe.size origin location, Set.toList entities ) ]
+                Singleton _ ids location ->
+                    [ { position = from universe.size origin location
+                      , members =
+                            universe.entities
+                                |> IntDict.filter
+                                    (\id _ ->
+                                        Set.member id ids
+                                    )
+                                |> IntDict.toList
+                      }
+                    ]
 
-                Cluster size entities subClusters ->
+                Cluster size locations subClusters ->
                     let
                         center =
                             vec2 (size / 2) (size / 2)
@@ -196,9 +219,23 @@ clusters precision (Plane universe) =
 
                         distance =
                             Vector2.length position
+
+                        ids =
+                            locations
+                                |> IntDict.keys
+                                |> Set.fromList
                     in
                     if size / distance < precision then
-                        [ ( position, IntDict.keys entities ) ]
+                        [ { position = position
+                          , members =
+                                universe.entities
+                                    |> IntDict.filter
+                                        (\id _ ->
+                                            Set.member id ids
+                                        )
+                                    |> IntDict.toList
+                          }
+                        ]
 
                     else
                         let

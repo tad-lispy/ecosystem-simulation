@@ -38,7 +38,7 @@ init =
       , interactions = []
       }
     , { this = Just Pretton
-      , movement = vec2 -200 200
+      , movement = vec2 -200 100
       , interactions = []
       }
     , { this = Just Uglon
@@ -49,17 +49,25 @@ init =
 
 
 update :
-    Id
+    Duration
+    -> Id
     -> Entity
     -> List (Interaction Action)
     -> List (Group Entity)
-    -> Duration
     -> Update Entity Action
-update id entity interactions groups duration =
-    { this = Just entity
-    , interactions = []
-    , movement = vec2 0 0
-    }
+update duration id entity interactions groups =
+    case entity of
+        Uglon ->
+            { this = Just entity
+            , interactions = []
+            , movement = vec2 (-duration / 10) 0
+            }
+
+        Pretton ->
+            { this = Just entity
+            , interactions = []
+            , movement = vec2 (duration / 10) 0
+            }
 
 
 view : Entity -> Image
