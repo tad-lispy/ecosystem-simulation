@@ -16,6 +16,7 @@ import Color exposing (Color)
 import Element exposing (Element)
 import Html exposing (Html)
 import IntDict exposing (IntDict)
+import List.Extra as List
 import WrappedPlane exposing (Plane)
 
 
@@ -56,7 +57,7 @@ type alias Flags =
 
 type alias Model entity action =
     { surface : Plane entity
-    , interactions : IntDict (Interaction action)
+    , interactions : InteractionsRegister action
     }
 
 
@@ -84,7 +85,7 @@ type alias Image =
 
 
 type alias Update entity action =
-    { entity : entity
+    { this : Maybe entity
     , interactions : List (Interaction action)
     , movement : Vec2
     }
@@ -99,11 +100,56 @@ init :
     -> Flags
     -> ( Model entity action, Cmd Msg )
 init setup _ =
-    ( { surface = WrappedPlane.empty setup.size
-      , interactions = IntDict.empty
-      }
+    let
+        empty : Model entity surface
+        empty =
+            { surface = WrappedPlane.empty setup.size
+            , interactions = IntDict.empty
+            }
+
+        initReducer :
+            Int
+            -> Update entity action
+            -> Model entity action
+            -> Model entity action
+        initReducer id { this, interactions, movement } model =
+            case this of
+                Nothing ->
+                    model
+
+                Just entity ->
+                    { model
+                        | surface =
+                            WrappedPlane.place id entity model.surface
+                        , interactions =
+                            List.foldl
+                                (registerInteraction id)
+                                model.interactions
+                                interactions
+                    }
+
+        registerInteraction :
+            Id
+            -> Interaction action
+            -> InteractionsRegister action
+            -> InteractionsRegister action
+        registerInteraction actor { other, action } register =
+            let
+                interactions =
+                    register
+                        |> IntDict.get other
+                        |> Maybe.withDefault []
+                        |> (::) { other = actor, action = action }
+            in
+            IntDict.insert other interactions register
+    in
+    ( List.indexedFoldl initReducer empty setup.init
     , Cmd.none
     )
+
+
+type alias InteractionsRegister action =
+    IntDict (List (Interaction action))
 
 
 type Msg

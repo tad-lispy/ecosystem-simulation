@@ -33,7 +33,19 @@ type alias Action =
 
 init : List (Update Entity Action)
 init =
-    []
+    [ { this = Just Pretton
+      , movement = vec2 200 200
+      , interactions = []
+      }
+    , { this = Just Pretton
+      , movement = vec2 -200 200
+      , interactions = []
+      }
+    , { this = Just Pretton
+      , movement = vec2 0 -160
+      , interactions = []
+      }
+    ]
 
 
 update :
@@ -44,7 +56,7 @@ update :
     -> Duration
     -> Update Entity Action
 update id entity interactions groups duration =
-    { entity = entity
+    { this = Just entity
     , interactions = []
     , movement = vec2 0 0
     }
