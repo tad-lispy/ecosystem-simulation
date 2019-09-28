@@ -6,7 +6,6 @@ module WrappedPlane exposing
     , clusters
     , empty
     , foldl
-    , grid
     , place
     , remove
     , render
@@ -192,6 +191,7 @@ clusters :
     -> List (Group entity)
 clusters precision (Plane universe) =
     let
+        internal : Vec2 -> Cluster -> List (Group entity)
         internal origin cluster =
             case cluster of
                 Empty _ ->
@@ -277,39 +277,3 @@ from size start end =
         |> wrap size
         |> Vector2.sub halfsize
 
-
-grid :
-    Int
-    -> Int
-    -> Float
-    -> Float
-    -> (Int -> entity)
-    -> Plane entity
-grid rows cols distance size constructor =
-    (rows * cols - 1)
-        |> List.range 0
-        |> List.foldl
-            (\id surface ->
-                let
-                    x =
-                        (modBy cols id
-                            |> toFloat
-                            |> (*) distance
-                        )
-                            + 100
-
-                    y =
-                        (id // cols)
-                            |> toFloat
-                            |> (*) distance
-                            |> (+) 300
-
-                    entity =
-                        constructor id
-                in
-                surface
-                    |> shift (vec2 x y)
-                    |> place id entity
-                    |> return
-            )
-            (empty size)

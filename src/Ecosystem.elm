@@ -6,6 +6,7 @@ module Ecosystem exposing
     , Interaction
     , Setup
     , Update
+    , grid
     , simulation
     )
 
@@ -178,8 +179,20 @@ update setup msg model =
                     in
                     surface
                         |> WrappedPlane.clusters 0.9
+                        |> List.filter
+                            (\group ->
+                                -- FIXME: There is a bug in
+                                -- WrappedPlane.clusters and sometimes own
+                                -- cluster is reported to position slightly
+                                -- different than (0, 0). This works around it.
+                                --
+                                -- Apart from the bug this prevents extreme
+                                -- forces being applied resulting in noisy
+                                -- simulations
+                                Vector2.lengthSquared group.position > 10
+                            )
                         |> setup.update
-                            duration
+                            virtualDuration
                             id
                             this
                             incomingInteractions
@@ -207,6 +220,13 @@ update setup msg model =
                                                     entityUpdate.interactions
                                         }
                            )
+
+                virtualDuration : Float
+                virtualDuration =
+                    -- If the frame rate drops below 30fps then slow down the
+                    -- animation but retain precision. Otherwise there is too
+                    -- much noise and things get wild.
+                    min duration 32
             in
             ( model.surface
                 |> WrappedPlane.foldl updateReducer model
@@ -230,12 +250,25 @@ subscriptions model =
 
 view : Setup entity action -> Model entity action -> Html Msg
 view setup model =
+    let
+        viewport =
+            setup.size
+
+        viewbox =
+            [ viewport / -2
+            , viewport / -2
+            , viewport
+            , viewport
+            ]
+                |> List.map String.fromFloat
+                |> String.join " "
+    in
     model
         |> paintScene setup
         |> Svg.svg
             [ Html.Attributes.style "width" "100%"
             , Html.Attributes.style "height" "100%"
-            , Svg.Attributes.viewBox "-250 -250 500 500"
+            , Svg.Attributes.viewBox viewbox
             , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
             , Html.Attributes.style "background" <|
                 Color.toCssString <|
@@ -288,6 +321,38 @@ paintEntity setup ( id, entity, position ) =
 
 
 -- Helpers
+
+
+grid :
+    Int
+    -> Int
+    -> Float
+    -> (Int -> entity)
+    -> List (Update entity action)
+grid rows cols distance constructor =
+    (rows * cols - 1)
+        |> List.range 0
+        |> List.map
+            (\id ->
+                let
+                    x =
+                        modBy cols id
+                            |> toFloat
+                            |> (*) distance
+
+                    y =
+                        (id // cols)
+                            |> toFloat
+                            |> (*) distance
+
+                    entity =
+                        constructor id
+                in
+                { this = Just entity
+                , movement = vec2 x y
+                , interactions = []
+                }
+            )
 
 
 registerInteraction :

@@ -1,6 +1,6 @@
 module Demo exposing (main)
 
-import AltMath.Vector2 exposing (Vec2, vec2)
+import AltMath.Vector2 as Vector2 exposing (Vec2, vec2)
 import Color exposing (Color)
 import Ecosystem
     exposing
@@ -13,12 +13,22 @@ import Ecosystem
         )
 
 
+constants =
+    { universeSize = 2000
+    , minForce = -0.001
+    , repulsionMagnitude = 1.5
+    , repulsionScale = 15
+    , attractionMagnitude = 1
+    , attractionScale = 1
+    }
+
+
 main =
     Ecosystem.simulation
         { update = update
         , init = init
         , view = view
-        , size = 500
+        , size = constants.universeSize
         }
 
 
@@ -33,19 +43,17 @@ type alias Action =
 
 init : List (Update Entity Action)
 init =
-    [ { this = Just Pretton
-      , movement = vec2 200 200
-      , interactions = []
-      }
-    , { this = Just Pretton
-      , movement = vec2 -200 100
-      , interactions = []
-      }
-    , { this = Just Uglon
-      , movement = vec2 0 -160
-      , interactions = []
-      }
-    ]
+    Ecosystem.grid
+        12
+        9
+        23
+        (\index ->
+            if modBy 5 index < 3 then
+                Uglon
+
+            else
+                Pretton
+        )
 
 
 update :
@@ -56,18 +64,31 @@ update :
     -> List (Group Entity)
     -> Update Entity Action
 update duration id entity interactions groups =
-    case entity of
-        Uglon ->
-            { this = Just entity
-            , interactions = []
-            , movement = vec2 (-duration / 10) 0
-            }
+    {- The behavior is the same so we don't need to differentiate between different kinds of entities. If we want to introduce differences, then pattern matching with
 
-        Pretton ->
-            { this = Just entity
-            , interactions = []
-            , movement = vec2 (duration / 10) 0
-            }
+           case entity of
+               Uglon ->
+                   ...
+               Pretton ->
+                   ...
+
+       would work
+    -}
+    let
+        mass : Float
+        mass =
+            0.01
+
+        forces =
+            List.map force groups
+    in
+    { this = Just entity
+    , interactions = []
+    , movement =
+        forces
+            |> List.foldl Vector2.add equilibrium
+            |> Vector2.scale (duration / mass)
+    }
 
 
 view : Entity -> Image
@@ -84,3 +105,51 @@ view entity =
             , stroke = Color.blue
             , size = 5
             }
+
+
+
+-- Helpers
+
+
+equilibrium =
+    vec2 0 0
+
+
+charge : Group Entity -> Float
+charge group =
+    group.members
+        |> List.map Tuple.second
+        |> List.foldl
+            (\member memo ->
+                case member of
+                    Uglon ->
+                        memo - 1
+
+                    Pretton ->
+                        memo + 1
+            )
+            0
+
+
+force : Group Entity -> Vec2
+force group =
+    let
+        strength =
+            (attraction - repulsion)
+                |> max constants.minForce
+
+        direction =
+            Vector2.normalize group.position
+
+        attraction =
+            (charge group * constants.attractionScale)
+                / (distance ^ constants.attractionMagnitude)
+
+        repulsion =
+            constants.repulsionScale
+                / (distance ^ constants.repulsionMagnitude)
+
+        distance =
+            Vector2.lengthSquared group.position
+    in
+    Vector2.scale strength direction
