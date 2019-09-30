@@ -1,59 +1,73 @@
 module Ecosystem exposing
-    ( Duration
+    ( ActorUpdate(..)
+    , Change(..)
+    , Coordinates
     , Group
     , Id
     , Image
     , Interaction
+    , Program
     , Setup
-    , Update
     , grid
     , simulation
     )
 
-import AltMath.Vector2 as Vector2 exposing (Vec2, vec2)
 import Browser
 import Browser.Events
+import Cluster exposing (Coordinates)
 import Color exposing (Color)
+import Duration exposing (Duration, Seconds)
 import Element exposing (Element)
 import Html exposing (Html)
 import Html.Attributes
 import IntDict exposing (IntDict)
+import Json.Decode
+import Length exposing (Length, Meters)
 import List.Extra as List
+import Maybe.Extra as Maybe
+import Pixels exposing (Pixels)
+import Point2d exposing (Point2d)
+import Quantity exposing (Quantity, Rate, zero)
 import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
 import Transformation exposing (Transformation)
+import Vector2d exposing (Vector2d)
 import WrappedPlane exposing (Plane)
 
 
 simulation :
-    Setup entity action
-    -> Program Flags (Model entity action) Msg
+    Setup actor action
+    -> Program actor action
 simulation setup =
-    let
-        main : Program Flags (Model entity action) Msg
-        main =
-            Browser.element
-                { init = init setup
-                , view = view setup
-                , update = update setup
-                , subscriptions = subscriptions
-                }
-    in
-    main
+    Browser.element
+        { init = init setup
+        , view = view setup
+        , update = update setup
+        , subscriptions = subscriptions
+        }
 
 
-type alias Setup entity action =
-    { update :
-        Duration
+type alias Program actor action =
+    Platform.Program Flags (Model actor action) Msg
+
+
+type alias Resolution =
+    Quantity Float (Rate Pixels Meters)
+
+
+type alias Setup actor action =
+    { updateActor :
+        (Id -> Maybe actor)
+        -> Duration
         -> Id
-        -> entity
+        -> actor
+        -> List Group
         -> List (Interaction action)
-        -> List (Group entity)
-        -> Update entity action
-    , init : List (Update entity action)
-    , view : entity -> Image
-    , size : Float
+        -> ActorUpdate actor action
+    , init : List (ActorUpdate actor action)
+    , paintActor : actor -> Image
+    , size : Length
     }
 
 
@@ -61,10 +75,12 @@ type alias Flags =
     ()
 
 
-type alias Model entity action =
-    { surface : Plane entity
+type alias Model actor action =
+    { surface : Plane
     , interactions : InteractionsRegister action
     , paused : Bool
+    , actors : IntDict actor
+    , selected : Maybe Id
     }
 
 
@@ -78,65 +94,81 @@ type alias Interaction action =
     }
 
 
-type alias Group entity =
+type alias Group =
     -- Alias and re-expose
-    WrappedPlane.Group entity
+    WrappedPlane.Group
 
 
 type alias Image =
     { fill : Color
     , stroke : Color
-    , size : Float
+    , size : Length
     }
 
 
-type alias Update entity action =
-    { this : Maybe entity
-    , interactions : List (Interaction action)
-    , movement : Vec2
-    }
+type ActorUpdate actor action
+    = ActorUpdate
+        { change : Change actor
+        , interactions : List (Interaction action)
+        , movement : Vector2d Meters Coordinates
+        , spawn : List (ActorUpdate actor action)
+        }
 
 
-type alias Duration =
-    Float
+type alias Coordinates =
+    Cluster.Coordinates
+
+
+type Change actor
+    = Unchanged
+    | Changed actor
+    | Removed
 
 
 init :
-    Setup entity action
+    Setup actor action
     -> Flags
-    -> ( Model entity action, Cmd Msg )
+    -> ( Model actor action, Cmd Msg )
 init setup _ =
     let
-        empty : Model entity surface
+        empty : Model actor action
         empty =
             { surface = WrappedPlane.empty setup.size
             , interactions = IntDict.empty
+            , actors = IntDict.empty
             , paused = False
+            , selected = Nothing
             }
 
         initReducer :
             Int
-            -> Update entity action
-            -> Model entity action
-            -> Model entity action
-        initReducer id { this, interactions, movement } model =
-            case this of
-                Nothing ->
+            -> ActorUpdate actor action
+            -> Model actor action
+            -> Model actor action
+        initReducer id (ActorUpdate { change, interactions, spawn, movement }) model =
+            case change of
+                Unchanged ->
                     model
 
-                Just entity ->
+                Changed actor ->
                     { model
                         | surface =
                             model.surface
                                 |> WrappedPlane.shift movement
-                                |> WrappedPlane.place id entity
+                                |> WrappedPlane.place id
                                 |> WrappedPlane.return
+                        , actors =
+                            model.actors
+                                |> IntDict.insert id actor
                         , interactions =
                             List.foldl
                                 (registerInteraction id)
                                 model.interactions
                                 interactions
                     }
+
+                Removed ->
+                    model
     in
     ( List.indexedFoldl initReducer empty setup.init
     , Cmd.none
@@ -149,87 +181,108 @@ type alias InteractionsRegister action =
 
 type Msg
     = Animate Float
+    | Selected Id
     | Pause
 
 
 update :
-    Setup entity action
+    Setup actor action
     -> Msg
-    -> Model entity action
-    -> ( Model entity action, Cmd Msg )
+    -> Model actor action
+    -> ( Model actor action, Cmd Msg )
 update setup msg model =
     case msg of
-        Animate duration ->
+        Animate delta ->
             let
-                updateReducer :
-                    Id
-                    -> entity
-                    -> Model entity action
-                    -> Model entity action
-                updateReducer id this memo =
-                    let
-                        incomingInteractions =
-                            IntDict.get id model.interactions
-                                |> Maybe.withDefault []
-
-                        surface =
-                            memo.surface
-                                |> WrappedPlane.shiftTo id
-                                |> Maybe.withDefault memo.surface
-                    in
-                    surface
-                        |> WrappedPlane.clusters 0.9
-                        |> List.filter
-                            (\group ->
-                                -- FIXME: There is a bug in
-                                -- WrappedPlane.clusters and sometimes own
-                                -- cluster is reported to position slightly
-                                -- different than (0, 0). This works around it.
-                                --
-                                -- Apart from the bug this prevents extreme
-                                -- forces being applied resulting in noisy
-                                -- simulations
-                                Vector2.lengthSquared group.position > 10
-                            )
-                        |> setup.update
-                            virtualDuration
-                            id
-                            this
-                            incomingInteractions
-                        |> (\entityUpdate ->
-                                case entityUpdate.this of
-                                    Nothing ->
-                                        { memo
-                                            | surface =
-                                                WrappedPlane.remove id memo.surface
-                                            , interactions =
-                                                IntDict.remove id memo.interactions
-                                        }
-
-                                    Just entity ->
-                                        { memo
-                                            | surface =
-                                                surface
-                                                    |> WrappedPlane.shift entityUpdate.movement
-                                                    |> WrappedPlane.place id entity
-                                                    |> WrappedPlane.return
-                                            , interactions =
-                                                List.foldl
-                                                    (registerInteraction id)
-                                                    memo.interactions
-                                                    entityUpdate.interactions
-                                        }
-                           )
-
-                virtualDuration : Float
-                virtualDuration =
+                duration : Duration
+                duration =
                     -- If the frame rate drops below 30fps then slow down the
                     -- animation but retain precision. Otherwise there is too
                     -- much noise and things get wild.
-                    min duration 32
+                    delta
+                        |> min 32
+                        |> Duration.milliseconds
+
+                inspect : Id -> Maybe actor
+                inspect id =
+                    IntDict.get id model.actors
+
+                updateActor :
+                    Id
+                    -> actor
+                    -> ActorUpdate actor action
+                updateActor id actor =
+                    case WrappedPlane.shiftTo id model.surface of
+                        Nothing ->
+                            -- This should never happen
+                            ActorUpdate
+                                { change = Removed
+                                , movement = Vector2d.zero
+                                , interactions = []
+                                , spawn = []
+                                }
+
+                        Just plane ->
+                            setup.updateActor
+                                inspect
+                                duration
+                                id
+                                actor
+                                (WrappedPlane.clusters 0.9 plane)
+                                (model.interactions
+                                    |> IntDict.get id
+                                    |> Maybe.withDefault []
+                                )
+
+                applyActorUpdate :
+                    Id
+                    -> ActorUpdate actor action
+                    -> Model actor action
+                    -> Model actor action
+                applyActorUpdate id (ActorUpdate actorUpdate) memo =
+                    case actorUpdate.change of
+                        Unchanged ->
+                            { memo
+                                | actors = memo.actors
+                                , surface =
+                                    memo.surface
+                                        |> WrappedPlane.shiftTo id
+                                        |> Maybe.map (WrappedPlane.shift actorUpdate.movement)
+                                        |> Maybe.map (WrappedPlane.place id)
+                                        |> Maybe.withDefault memo.surface
+                                        |> WrappedPlane.return
+                            }
+
+                        Changed actor ->
+                            { memo
+                                | actors =
+                                    memo.actors
+                                        |> IntDict.insert id actor
+                                , surface =
+                                    memo.surface
+                                        |> WrappedPlane.shiftTo id
+                                        |> Maybe.map (WrappedPlane.shift actorUpdate.movement)
+                                        |> Maybe.map (WrappedPlane.place id)
+                                        |> Maybe.withDefault memo.surface
+                                        |> WrappedPlane.return
+                            }
+
+                        Removed ->
+                            { memo
+                                | actors =
+                                    IntDict.remove id memo.actors
+                                , surface =
+                                    WrappedPlane.remove id memo.surface
+                            }
             in
-            ( model.surface
-                |> WrappedPlane.foldl updateReducer model
+            ( model.actors
+                |> IntDict.map updateActor
+                |> IntDict.foldl applyActorUpdate model
+            , Cmd.none
+            )
+
+        Selected id ->
+            ( { model | selected = Just id }
             , Cmd.none
             )
 
@@ -239,7 +292,7 @@ update setup msg model =
             )
 
 
-subscriptions : Model entity action -> Sub Msg
+subscriptions : Model actor action -> Sub Msg
 subscriptions model =
     if model.paused then
         Sub.none
@@ -248,11 +301,18 @@ subscriptions model =
         Browser.Events.onAnimationFrameDelta Animate
 
 
-view : Setup entity action -> Model entity action -> Html Msg
+view : Setup actor action -> Model actor action -> Html Msg
 view setup model =
     let
+        resolution =
+            Quantity.per
+                (Length.meters 1)
+                (Pixels.pixels 100)
+
         viewport =
             setup.size
+                |> Quantity.at resolution
+                |> Pixels.inPixels
 
         viewbox =
             [ viewport / -2
@@ -264,7 +324,7 @@ view setup model =
                 |> String.join " "
     in
     model
-        |> paintScene setup
+        |> paintScene setup resolution
         |> Svg.svg
             [ Html.Attributes.style "width" "100%"
             , Html.Attributes.style "height" "100%"
@@ -288,21 +348,50 @@ view setup model =
             ]
 
 
-paintScene : Setup entity action -> Model entity action -> List (Svg Msg)
-paintScene setup model =
+paintScene :
+    Setup actor action
+    -> Resolution
+    -> Model actor action
+    -> List (Svg Msg)
+paintScene setup resolution model =
     model.surface
         |> WrappedPlane.render 500 500
-        |> List.map (paintEntity setup)
+        |> List.map
+            (\( id, position ) ->
+                model.actors
+                    |> IntDict.get id
+                    |> Maybe.map (paintActor setup resolution id position)
+            )
+        |> Maybe.values
 
 
-paintEntity : Setup entity action -> ( Id, entity, Vec2 ) -> Svg Msg
-paintEntity setup ( id, entity, position ) =
+paintActor :
+    Setup actor action
+    -> Resolution
+    -> Id
+    -> Vector2d Meters Coordinates
+    -> actor
+    -> Svg Msg
+paintActor setup resolution id position actor =
     let
         image =
-            setup.view entity
+            setup.paintActor actor
+
+        size =
+            image.size
+                |> Quantity.at resolution
+                |> Pixels.inPixels
+
+        strokeWidth =
+            size / 5
+
+        translation =
+            position
+                |> Vector2d.at resolution
+                |> Transformation.Translate
     in
     Svg.circle
-        [ image.size
+        [ size
             |> String.fromFloat
             |> Svg.Attributes.r
         , image.fill
@@ -311,10 +400,18 @@ paintEntity setup ( id, entity, position ) =
         , image.stroke
             |> Color.toCssString
             |> Svg.Attributes.stroke
-        , position
-            |> Transformation.Translate
+        , strokeWidth
+            |> String.fromFloat
+            |> Svg.Attributes.strokeWidth
+        , translation
             |> Transformation.toString
             |> Svg.Attributes.transform
+        , Svg.Events.stopPropagationOn "click"
+            (Json.Decode.succeed
+                ( Selected id
+                , True
+                )
+            )
         ]
         []
 
@@ -326,9 +423,9 @@ paintEntity setup ( id, entity, position ) =
 grid :
     Int
     -> Int
-    -> Float
-    -> (Int -> entity)
-    -> List (Update entity action)
+    -> Length
+    -> (Int -> actor)
+    -> List (ActorUpdate actor action)
 grid rows cols distance constructor =
     (rows * cols - 1)
         |> List.range 0
@@ -336,22 +433,28 @@ grid rows cols distance constructor =
             (\id ->
                 let
                     x =
-                        modBy cols id
-                            |> toFloat
-                            |> (*) distance
+                        distance
+                            |> Quantity.multiplyBy
+                                (modBy cols id
+                                    |> toFloat
+                                )
 
                     y =
-                        (id // cols)
-                            |> toFloat
-                            |> (*) distance
+                        distance
+                            |> Quantity.multiplyBy
+                                ((id // cols)
+                                    |> toFloat
+                                )
 
-                    entity =
+                    actor =
                         constructor id
                 in
-                { this = Just entity
-                , movement = vec2 x y
-                , interactions = []
-                }
+                ActorUpdate
+                    { change = Changed actor
+                    , interactions = []
+                    , movement = Vector2d.xy x y
+                    , spawn = []
+                    }
             )
 
 

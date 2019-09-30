@@ -1,20 +1,36 @@
 module Cluster exposing
     ( Cluster(..)
+    , Coordinates(..)
     , clusters
     , insert
     , location
+    , locations
     , remove
     )
 
-import AltMath.Vector2 as Vector2 exposing (Vec2, vec2)
 import IntDict exposing (IntDict)
+import Length exposing (Length, Meters)
+import Point2d exposing (Point2d)
+import Quantity exposing (zero)
 import Set exposing (Set)
+import Vector2d exposing (Vector2d)
+
+
+type Coordinates
+    = Global
+    | Local (Vector2d Meters Coordinates)
 
 
 type Cluster
-    = Empty Float
-    | Singleton Float (Set Id) Vec2
-    | Cluster Float (IntDict Vec2) SubClusters
+    = Empty Length
+    | Singleton Length (Set Id) (Point2d Meters Coordinates)
+    | Cluster Length (IntDict (Point2d Meters Coordinates)) SubClusters
+
+
+type alias Group =
+    { members : Set Id
+    , location : Point2d Meters Coordinates
+    }
 
 
 type alias Id =
@@ -29,7 +45,49 @@ type alias SubClusters =
     }
 
 
-insert : Vec2 -> Id -> Cluster -> Cluster
+
+{- TODO: The Quadrant type seems useful, but is currently unused. Either start using it or remove dead code -}
+
+
+type Quadrant
+    = TopLeft
+    | TopRight
+    | BottomLeft
+    | BottomRight
+
+
+quadrant : Point2d Meters Coordinates -> Length -> Quadrant
+quadrant position size =
+    let
+        half : Length
+        half =
+            Quantity.half size
+    in
+    case
+        ( Point2d.xCoordinate position
+            |> Quantity.lessThan half
+        , Point2d.yCoordinate position
+            |> Quantity.lessThan half
+        )
+    of
+        ( True, True ) ->
+            TopLeft
+
+        ( True, False ) ->
+            TopRight
+
+        ( False, True ) ->
+            BottomLeft
+
+        ( False, False ) ->
+            BottomRight
+
+
+insert :
+    Point2d Meters Coordinates
+    -> Id
+    -> Cluster
+    -> Cluster
 insert position id cluster =
     case cluster of
         Empty size ->
@@ -43,7 +101,7 @@ insert position id cluster =
                 Singleton
                     size
                     (Set.insert id existingEntities)
-                    existingPoint
+                    position
 
             else
                 let
@@ -61,7 +119,9 @@ insert position id cluster =
                             emptySubCluster
 
                     emptySubCluster =
-                        Empty (size / 2)
+                        size
+                            |> Quantity.half
+                            |> Empty
                 in
                 existingEntities
                     |> Set.foldl
@@ -73,10 +133,16 @@ insert position id cluster =
 
         Cluster size entities existingSubClusters ->
             let
+                half : Length
+                half =
+                    Quantity.half size
+
                 subClusters =
                     case
-                        ( Vector2.getX position < (size / 2)
-                        , Vector2.getY position < (size / 2)
+                        ( Point2d.xCoordinate position
+                            |> Quantity.lessThan half
+                        , Point2d.yCoordinate position
+                            |> Quantity.lessThan half
                         )
                     of
                         ( True, True ) ->
@@ -89,37 +155,54 @@ insert position id cluster =
                         ( False, True ) ->
                             let
                                 x =
-                                    Vector2.getX position - (size / 2)
+                                    position
+                                        |> Point2d.xCoordinate
+                                        |> Quantity.minus half
+
+                                y =
+                                    position
+                                        |> Point2d.yCoordinate
                             in
                             { existingSubClusters
                                 | topRight =
                                     existingSubClusters.topRight
-                                        |> insert (Vector2.setX x position) id
+                                        |> insert (Point2d.xy x y) id
                             }
 
                         ( True, False ) ->
                             let
+                                x =
+                                    position
+                                        |> Point2d.xCoordinate
+
                                 y =
-                                    Vector2.getY position - (size / 2)
+                                    position
+                                        |> Point2d.yCoordinate
+                                        |> Quantity.minus half
                             in
                             { existingSubClusters
                                 | bottomLeft =
                                     existingSubClusters.bottomLeft
-                                        |> insert (Vector2.setY y position) id
+                                        |> insert (Point2d.xy x y) id
                             }
 
                         ( False, False ) ->
                             let
+                                x : Length
                                 x =
-                                    Vector2.getX position - (size / 2)
+                                    position
+                                        |> Point2d.xCoordinate
+                                        |> Quantity.minus half
 
                                 y =
-                                    Vector2.getY position - (size / 2)
+                                    position
+                                        |> Point2d.yCoordinate
+                                        |> Quantity.minus half
                             in
                             { existingSubClusters
                                 | bottomRight =
                                     existingSubClusters.bottomRight
-                                        |> insert (vec2 x y) id
+                                        |> insert (Point2d.xy x y) id
                             }
             in
             Cluster
@@ -171,10 +254,16 @@ remove id cluster =
 
                         _ ->
                             let
+                                half : Length
+                                half =
+                                    Quantity.half size
+
                                 subClusters =
                                     case
-                                        ( Vector2.getX position < (size / 2)
-                                        , Vector2.getY position < (size / 2)
+                                        ( Point2d.xCoordinate position
+                                            |> Quantity.lessThan half
+                                        , Point2d.yCoordinate position
+                                            |> Quantity.lessThan half
                                         )
                                     of
                                         ( True, True ) ->
@@ -211,53 +300,83 @@ remove id cluster =
                                 subClusters
 
 
-location : Id -> Cluster -> Maybe Vec2
-location id cluster =
+locations :
+    Cluster
+    -> IntDict (Point2d Meters Coordinates)
+locations cluster =
     case cluster of
         Empty _ ->
-            Nothing
+            IntDict.empty
 
-        Singleton _ entities position ->
-            if Set.member id entities then
-                Just position
+        Singleton _ ids position ->
+            Set.foldl
+                (\id -> IntDict.insert id position)
+                IntDict.empty
+                ids
 
-            else
-                Nothing
-
-        Cluster _ entities _ ->
-            IntDict.get id entities
+        Cluster _ ids _ ->
+            ids
 
 
-clusters : Float -> Vec2 -> Cluster -> List ( Vec2, List Id )
+location :
+    Id
+    -> Cluster
+    -> Maybe (Point2d Meters Coordinates)
+location id cluster =
+    cluster
+        |> locations
+        |> IntDict.get id
+
+
+clusters :
+    Float
+    -> Point2d Meters Coordinates
+    -> Cluster
+    -> List Group
 clusters precision viewpoint cluster =
     case cluster of
         Empty _ ->
             []
 
-        Singleton _ entities position ->
-            [ ( position, Set.toList entities ) ]
+        Singleton _ ids position ->
+            [ { location = position
+              , members = ids
+              }
+            ]
 
-        Cluster size entities subClusters ->
+        Cluster size ids subClusters ->
             let
+                half =
+                    Quantity.half size
+
                 center =
-                    vec2 (size / 2) (size / 2)
+                    Point2d.xy half half
 
                 distance =
-                    Vector2.distance viewpoint center
+                    Point2d.distanceFrom viewpoint center
             in
-            if size / distance < precision then
-                [ ( center, IntDict.keys entities ) ]
+            if Quantity.ratio size distance < precision then
+                [ { location = center
+                  , members =
+                        ids
+                            |> IntDict.keys
+                            |> Set.fromList
+                  }
+                ]
 
             else
                 let
+                    topRightTranslation : Vector2d Meters Coordinates
                     topRightTranslation =
-                        vec2 (size / 2) 0
+                        Vector2d.xy half Quantity.zero
 
+                    bottomLeftTranslation : Vector2d Meters Coordinates
                     bottomLeftTranslation =
-                        vec2 0 (size / 2)
+                        Vector2d.xy zero half
 
+                    bottomRightTranslation : Vector2d Meters Coordinates
                     bottomRightTranslation =
-                        vec2 (size / 2) (size / 2)
+                        Vector2d.xy half half
                 in
                 [ subClusters.topLeft
                     |> clusters
@@ -266,20 +385,50 @@ clusters precision viewpoint cluster =
                 , subClusters.topRight
                     |> clusters
                         precision
-                        (Vector2.sub viewpoint topRightTranslation)
+                        (Point2d.translateBy
+                            (Vector2d.reverse topRightTranslation)
+                            viewpoint
+                        )
                     |> List.map
-                        (Tuple.mapFirst (Vector2.add topRightTranslation))
+                        (\group ->
+                            { members = group.members
+                            , location =
+                                Point2d.translateBy
+                                    topRightTranslation
+                                    group.location
+                            }
+                        )
                 , subClusters.bottomLeft
                     |> clusters
                         precision
-                        (Vector2.sub viewpoint bottomLeftTranslation)
+                        (Point2d.translateBy
+                            (Vector2d.reverse bottomLeftTranslation)
+                            viewpoint
+                        )
                     |> List.map
-                        (Tuple.mapFirst (Vector2.add bottomLeftTranslation))
+                        (\group ->
+                            { members = group.members
+                            , location =
+                                Point2d.translateBy
+                                    bottomLeftTranslation
+                                    group.location
+                            }
+                        )
                 , subClusters.bottomRight
                     |> clusters
                         precision
-                        (Vector2.sub viewpoint bottomRightTranslation)
+                        (Point2d.translateBy
+                            (Vector2d.reverse bottomRightTranslation)
+                            viewpoint
+                        )
                     |> List.map
-                        (Tuple.mapFirst (Vector2.add bottomRightTranslation))
+                        (\group ->
+                            { members = group.members
+                            , location =
+                                Point2d.translateBy
+                                    bottomRightTranslation
+                                    group.location
+                            }
+                        )
                 ]
                     |> List.concat

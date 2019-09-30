@@ -1,155 +1,102 @@
 module Demo exposing (main)
 
-import AltMath.Vector2 as Vector2 exposing (Vec2, vec2)
+import Angle exposing (Angle)
 import Color exposing (Color)
+import Direction2d exposing (Direction2d)
+import Duration exposing (Duration)
 import Ecosystem
     exposing
-        ( Duration
+        ( ActorUpdate(..)
+        , Change(..)
+        , Coordinates
         , Group
         , Id
         , Image
         , Interaction
-        , Update
         )
+import Force exposing (Force, Newtons)
+import Length exposing (Length, Meters)
+import Mass exposing (Mass)
+import Maybe.Extra as Maybe
+import Quantity exposing (Quantity, Rate, zero)
+import Set exposing (Set)
+import Speed exposing (MetersPerSecond, Speed)
+import Vector2d exposing (Vector2d)
 
 
-constants =
-    { universeSize = 2000
-    , minForce = -0.001
-    , repulsionMagnitude = 1.5
-    , repulsionScale = 15
-    , attractionMagnitude = 1
-    , attractionScale = 1
-    }
-
-
+main : Ecosystem.Program () action
 main =
     Ecosystem.simulation
-        { update = update
+        { size = Length.meters 100
+        , updateActor = updateActor
+        , paintActor = paintActor
         , init = init
-        , view = view
-        , size = constants.universeSize
         }
 
 
-type Entity
-    = Pretton
-    | Uglon
-
-
-type alias Action =
-    ()
-
-
-init : List (Update Entity Action)
-init =
-    Ecosystem.grid
-        12
-        9
-        23
-        (\index ->
-            if modBy 5 index < 3 then
-                Uglon
-
-            else
-                Pretton
-        )
-
-
-update :
-    Duration
+updateActor :
+    (Id -> Maybe actor)
+    -> Duration
     -> Id
-    -> Entity
-    -> List (Interaction Action)
-    -> List (Group Entity)
-    -> Update Entity Action
-update duration id entity interactions groups =
-    {- The behavior is the same so we don't need to differentiate between different kinds of entities. If we want to introduce differences, then pattern matching with
-
-           case entity of
-               Uglon ->
-                   ...
-               Pretton ->
-                   ...
-
-       would work
-    -}
+    -> actor
+    -> List Group
+    -> List (Interaction action)
+    -> ActorUpdate actor action
+updateActor inspect duration id this groups interactions =
     let
-        mass : Float
-        mass =
-            0.01
+        speed =
+            Quantity.per
+                (Duration.seconds 1)
+                (Length.meters 5)
 
-        forces =
-            List.map force groups
+        direction =
+            groups
+                |> List.sortBy
+                    (.position
+                        >> Vector2d.length
+                        >> Length.inMeters
+                    )
+                |> List.drop 1
+                |> List.head
+                |> Maybe.map .position
+                |> Maybe.andThen Vector2d.direction
+                |> Maybe.map Direction2d.reverse
+                |> Maybe.withDefault Direction2d.positiveY
+
+        distance =
+            Quantity.for
+                duration
+                speed
+
+        movement =
+            Vector2d.withLength
+                distance
+                direction
     in
-    { this = Just entity
-    , interactions = []
-    , movement =
-        forces
-            |> List.foldl Vector2.add equilibrium
-            |> Vector2.scale (duration / mass)
+    ActorUpdate
+        { change = Unchanged
+        , movement = movement
+        , interactions = []
+        , spawn = []
+        }
+
+
+paintActor : actor -> Image
+paintActor actor =
+    { size = Length.meters 1
+    , fill = Color.white
+    , stroke = Color.green
     }
 
 
-view : Entity -> Image
-view entity =
-    case entity of
-        Uglon ->
-            { fill = Color.lightYellow
-            , stroke = Color.orange
-            , size = 5
-            }
-
-        Pretton ->
-            { fill = Color.lightBlue
-            , stroke = Color.blue
-            , size = 5
-            }
-
-
-
--- Helpers
-
-
-equilibrium =
-    vec2 0 0
-
-
-charge : Group Entity -> Float
-charge group =
-    group.members
-        |> List.map Tuple.second
-        |> List.foldl
-            (\member memo ->
-                case member of
-                    Uglon ->
-                        memo - 1
-
-                    Pretton ->
-                        memo + 1
-            )
-            0
-
-
-force : Group Entity -> Vec2
-force group =
+init =
     let
-        strength =
-            (attraction - repulsion)
-                |> max constants.minForce
-
-        direction =
-            Vector2.normalize group.position
-
-        attraction =
-            (charge group * constants.attractionScale)
-                / (distance ^ constants.attractionMagnitude)
-
-        repulsion =
-            constants.repulsionScale
-                / (distance ^ constants.repulsionMagnitude)
-
-        distance =
-            Vector2.lengthSquared group.position
+        constructor : Int -> ()
+        constructor id =
+            ()
     in
-    Vector2.scale strength direction
+    Ecosystem.grid
+        2
+        2
+        (Length.meters 10)
+        constructor

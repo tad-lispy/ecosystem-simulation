@@ -1,9 +1,11 @@
 module WrappedPlane exposing
-    ( Group
+    ( DCluster
+    , Group
     , Id
     , Plane
     , anchor
     , clusters
+    , debug
     , empty
     , foldl
     , place
@@ -12,23 +14,26 @@ module WrappedPlane exposing
     , return
     , shift
     , shiftTo
+    , toList
     )
 
-import AltMath.Vector2 as Vector2 exposing (Vec2, vec2)
 import Basics.Extra exposing (fractionalModBy)
-import Cluster exposing (Cluster(..))
+import Cluster exposing (Cluster(..), Coordinates(..))
 import IntDict exposing (IntDict)
+import Length exposing (Length, Meters)
 import Maybe.Extra as Maybe
-import Set
+import Point2d exposing (Point2d)
+import Quantity exposing (zero)
+import Set exposing (Set)
+import Vector2d exposing (Vector2d)
 
 
-type Plane entity
+type Plane
     = Plane
         { cluster : Cluster
-        , entities : IntDict entity
-        , size : Float
-        , cursor : Vec2
-        , anchor : Vec2
+        , size : Length
+        , cursor : Point2d Meters Coordinates
+        , anchor : Point2d Meters Coordinates
         }
 
 
@@ -36,52 +41,55 @@ type alias Id =
     Int
 
 
-type alias Group entity =
-    { members : List ( Id, entity )
-    , position : Vec2
+type alias Group =
+    { members : Set Id
+    , position : Vector2d Meters Coordinates
     }
 
 
-empty : Float -> Plane entity
+empty : Length -> Plane
 empty size =
     Plane
         { cluster = Empty size
-        , entities = IntDict.empty
-        , cursor = vec2 0 0
-        , anchor = vec2 0 0
+        , cursor = Point2d.origin
+        , anchor = Point2d.origin
         , size = size
         }
 
 
-anchor : Plane entity -> Plane entity
+anchor : Plane -> Plane
 anchor (Plane this) =
     Plane { this | anchor = this.cursor }
 
 
-return : Plane entity -> Plane entity
+return : Plane -> Plane
 return (Plane this) =
     Plane { this | cursor = this.anchor }
 
 
 place :
     Id
-    -> entity
-    -> Plane entity
-    -> Plane entity
-place id entity (Plane this) =
+    -> Plane
+    -> Plane
+place id (Plane this) =
+    let
+        cluster =
+            this.cluster
+                |> Cluster.remove id
+                |> Cluster.insert this.cursor id
+
+        _ =
+            cluster
+                |> debug
+                |> Debug.log "After insert"
+    in
     Plane
         { this
-            | cluster =
-                this.cluster
-                    |> Cluster.remove id
-                    |> Cluster.insert this.cursor id
-            , entities =
-                this.entities
-                    |> IntDict.insert id entity
+            | cluster = cluster
         }
 
 
-remove : Id -> Plane entity -> Plane entity
+remove : Id -> Plane -> Plane
 remove id (Plane this) =
     Plane
         { this
@@ -90,71 +98,56 @@ remove id (Plane this) =
         }
 
 
-foldl : (Id -> entity -> a -> a) -> a -> Plane entity -> a
+toList : Plane -> List Id
+toList (Plane this) =
+    Cluster.locations this.cluster
+        |> IntDict.keys
+
+
+foldl :
+    (Id -> Plane -> a -> a)
+    -> a
+    -> Plane
+    -> a
 foldl reducer initial (Plane this) =
-    this.entities
-        |> IntDict.foldl reducer initial
+    this.cluster
+        |> Cluster.locations
+        |> IntDict.foldl
+            (\id location ->
+                { this | cursor = location }
+                    |> Plane
+                    |> reducer id
+            )
+            initial
 
 
 render :
     Float
     -> Float
-    -> Plane entity
-    -> List ( Id, entity, Vec2 )
+    -> Plane
+    -> List ( Id, Vector2d Meters Coordinates )
 render width height (Plane this) =
-    case this.cluster of
-        Cluster.Empty _ ->
-            []
-
-        Cluster.Singleton _ entities location ->
-            entities
-                |> Set.toList
-                |> List.map
-                    (\id ->
-                        case IntDict.get id this.entities of
-                            Nothing ->
-                                Nothing
-
-                            Just entity ->
-                                Just
-                                    ( id
-                                    , entity
-                                    , from this.size this.cursor location
-                                    )
-                    )
-                |> Maybe.values
-
-        Cluster _ entities _ ->
-            entities
-                |> IntDict.toList
-                |> List.map
-                    (\( id, location ) ->
-                        case IntDict.get id this.entities of
-                            Nothing ->
-                                Nothing
-
-                            Just entity ->
-                                Just
-                                    ( id
-                                    , entity
-                                    , from this.size this.cursor location
-                                    )
-                    )
-                |> Maybe.values
+    this.cluster
+        |> Cluster.locations
+        |> IntDict.toList
+        |> List.map (Tuple.mapSecond (from this.size this.cursor))
 
 
-shift : Vec2 -> Plane entity -> Plane entity
+shift :
+    Vector2d Meters Coordinates
+    -> Plane
+    -> Plane
 shift vector (Plane this) =
     Plane
         { this
             | cursor =
                 this.cursor
-                    |> Vector2.add vector
+                    |> Point2d.translateBy vector
                     |> wrap this.size
         }
 
 
-shiftTo : Id -> Plane entity -> Maybe (Plane entity)
+shiftTo : Id -> Plane -> Maybe Plane
 shiftTo id (Plane this) =
     this.cluster
         |> Cluster.location id
@@ -163,117 +156,174 @@ shiftTo id (Plane this) =
         |> Maybe.map Plane
 
 
-{-| Place the point in a coordinate system between -size / 2 and size / 2
-
-    Point2d.fromCoordinates (0, 0)
-        |> wrap 100
-        --> Point2d.fromCoordinates (0, 0)
-
-    Point2d.fromCoordinates (20, 20)
-        |> wrap 100
-        --> Point2d.fromCoordinates (20, 20)
-
-    Point2d.fromCoordinates (60, 20)
-        |> wrap 100
-        --> Point2d.fromCoordinates (-40, 20)
-
--}
-wrap : Float -> Vec2 -> Vec2
+wrap : Length -> Point2d Meters Coordinates -> Point2d Meters Coordinates
 wrap size point =
-    vec2
-        (fractionalModBy size (Vector2.getX point))
-        (fractionalModBy size (Vector2.getY point))
+    let
+        x : Length
+        x =
+            point
+                |> Point2d.xCoordinate
+                |> Length.inMeters
+                |> fractionalModBy (Length.inMeters size)
+                |> Length.meters
+
+        y : Length
+        y =
+            point
+                |> Point2d.yCoordinate
+                |> Length.inMeters
+                |> fractionalModBy (Length.inMeters size)
+                |> Length.meters
+    in
+    Point2d.xy x y
 
 
 clusters :
     Float
-    -> Plane entity
-    -> List (Group entity)
+    -> Plane
+    -> List Group
 clusters precision (Plane universe) =
     let
-        internal : Vec2 -> Cluster -> List (Group entity)
-        internal origin cluster =
+        internal :
+            Point2d Meters Coordinates
+            -> Cluster
+            -> List Group
+        internal viewpoint cluster =
             case cluster of
                 Empty _ ->
                     []
 
                 Singleton _ ids location ->
-                    [ { position = from universe.size origin location
-                      , members =
-                            universe.entities
-                                |> IntDict.filter
-                                    (\id _ ->
-                                        Set.member id ids
-                                    )
-                                |> IntDict.toList
+                    [ { position = from universe.size viewpoint location
+                      , members = ids
                       }
                     ]
+                        |> Debug.log "Got to the bottom of the problem. A singleton."
 
                 Cluster size locations subClusters ->
                     let
+                        half =
+                            Quantity.half size
+
                         center =
-                            vec2 (size / 2) (size / 2)
+                            Point2d.xy half half
+                                |> Debug.log "Center is at"
 
                         position =
-                            from universe.size origin center
+                            from universe.size viewpoint center
 
                         distance =
-                            Vector2.length position
+                            Vector2d.length position
 
                         ids =
                             locations
                                 |> IntDict.keys
                                 |> Set.fromList
                     in
-                    if size / distance < precision then
+                    if Quantity.ratio size distance < precision then
                         [ { position = position
-                          , members =
-                                universe.entities
-                                    |> IntDict.filter
-                                        (\id _ ->
-                                            Set.member id ids
-                                        )
-                                    |> IntDict.toList
+                          , members = ids
                           }
                         ]
+                            |> Debug.log "Enough searching. Here is a cluster."
 
                     else
                         let
+                            topRightTranslation : Vector2d Meters Coordinates
                             topRightTranslation =
-                                vec2 (size / 2) 0
+                                Vector2d.xy half zero
 
+                            bottomLeftTranslation : Vector2d Meters Coordinates
                             bottomLeftTranslation =
-                                vec2 0 (size / 2)
+                                Vector2d.xy zero half
 
+                            bottomRightTranslation : Vector2d Meters Coordinates
                             bottomRightTranslation =
-                                vec2 (size / 2) (size / 2)
+                                Vector2d.xy half half
                         in
                         [ subClusters.topLeft
-                            |> internal origin
+                            |> internal
+                                viewpoint
                         , subClusters.topRight
                             |> internal
-                                (Vector2.sub origin topRightTranslation)
+                                (Point2d.translateBy
+                                    (Vector2d.reverse topRightTranslation)
+                                    viewpoint
+                                )
                         , subClusters.bottomLeft
                             |> internal
-                                (Vector2.sub origin bottomLeftTranslation)
+                                (Point2d.translateBy
+                                    (Vector2d.reverse bottomLeftTranslation)
+                                    viewpoint
+                                )
                         , subClusters.bottomRight
                             |> internal
-                                (Vector2.sub origin bottomRightTranslation)
+                                (Point2d.translateBy
+                                    (Vector2d.reverse bottomRightTranslation)
+                                    viewpoint
+                                )
                         ]
                             |> List.concat
     in
     internal universe.cursor universe.cluster
 
 
-from : Float -> Vec2 -> Vec2 -> Vec2
+from :
+    Length
+    -> Point2d Meters Coordinates
+    -> Point2d Meters Coordinates
+    -> Vector2d Meters Coordinates
 from size start end =
     let
-        halfsize =
-            vec2 (size / 2) (size / 2)
+        half : Length
+        half =
+            Quantity.half size
+
+        halfway =
+            Vector2d.xy half half
+
+        halfwayBack =
+            Vector2d.reverse halfway
+
+        back =
+            Vector2d.from start Point2d.origin
     in
     end
-        |> Vector2.add halfsize
-        |> Vector2.sub start
+        |> Point2d.translateBy halfway
+        |> Point2d.translateBy back
         |> wrap size
-        |> Vector2.sub halfsize
+        |> Point2d.translateBy halfwayBack
+        |> Vector2d.from Point2d.origin
 
+
+
+-- Debug utilities
+
+
+type DCluster
+    = DCluster
+        { topLeft : DCluster
+        , topRight : DCluster
+        , bottomLeft : DCluster
+        , bottomRight : DCluster
+        }
+    | DSingleton (List Id)
+    | DEmpty
+
+
+debug : Cluster -> DCluster
+debug cluster =
+    case cluster of
+        Empty _ ->
+            DEmpty
+
+        Singleton _ ids _ ->
+            DSingleton (ids |> Set.toList)
+
+        Cluster _ locations subClusters ->
+            DCluster
+                { topLeft = debug subClusters.topLeft
+                , topRight = debug subClusters.topRight
+                , bottomLeft = debug subClusters.bottomLeft
+                , bottomRight = debug subClusters.bottomRight
+                }
