@@ -27,7 +27,7 @@ import Vector2d exposing (Vector2d)
 main : Ecosystem.Program () action
 main =
     Ecosystem.simulation
-        { size = Length.meters 100
+        { size = Length.meters 500
         , updateActor = updateActor
         , paintActor = paintActor
         , init = init
@@ -56,7 +56,6 @@ updateActor inspect duration id this groups interactions =
                         >> Vector2d.length
                         >> Length.inMeters
                     )
-                |> List.drop 1
                 |> List.head
                 |> Maybe.map .position
                 |> Maybe.andThen Vector2d.direction
@@ -96,7 +95,7 @@ init =
             ()
     in
     Ecosystem.grid
-        2
-        2
+        10
+        10
         (Length.meters 10)
         constructor

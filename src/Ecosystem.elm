@@ -228,7 +228,13 @@ update setup msg model =
                                 duration
                                 id
                                 actor
-                                (WrappedPlane.clusters 0.9 plane)
+                                (plane
+                                    |> WrappedPlane.clusters 0.9
+                                    |> List.filter
+                                        (\group ->
+                                            group.position /= Vector2d.zero
+                                        )
+                                )
                                 (model.interactions
                                     |> IntDict.get id
                                     |> Maybe.withDefault []
