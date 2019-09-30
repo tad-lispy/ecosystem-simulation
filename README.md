@@ -1,3 +1,25 @@
+Elm Actor Based Simulation Kit 
+
+ReadME
+A framework for creating simulations of systems consisting of autonomous actors interacting with each other. (e.g. an ecosystem)
+
+Installation
+
+It's an Elm package. Install it the usual way:
+
+> elm install tad-lispy/elm-actors-simulation
+
+Design Goals
+
+- Simplicity
+  I hope it can be used by hobbysts (for fun) or in education (programming, ecology, systems thinking).
+
+- Actor centric development 
+  Applications should focus on programming actors. The macro behaviour of the system should be an amerging property of micro behaviours of actors.
+
+- Aesthetics
+  Smooth animations, nice colors, sharp shapes.
+
 
 Tutorial
 
