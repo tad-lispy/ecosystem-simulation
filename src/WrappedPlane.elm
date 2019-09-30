@@ -3,13 +3,14 @@ module WrappedPlane exposing
     , Group
     , Id
     , Plane
-    , anchor
     , clusters
     , debug
     , empty
     , foldl
     , place
+    , placeAnchor
     , remove
+    , removeAnchor
     , render
     , return
     , shift
@@ -33,7 +34,7 @@ type Plane
         { cluster : Cluster
         , size : Length
         , cursor : Point2d Meters Coordinates
-        , anchor : Point2d Meters Coordinates
+        , anchors : List (Point2d Meters Coordinates)
         }
 
 
@@ -52,19 +53,30 @@ empty size =
     Plane
         { cluster = Empty size
         , cursor = Point2d.origin
-        , anchor = Point2d.origin
+        , anchors = []
         , size = size
         }
 
 
-anchor : Plane -> Plane
-anchor (Plane this) =
-    Plane { this | anchor = this.cursor }
+placeAnchor : Plane -> Plane
+placeAnchor (Plane this) =
+    Plane { this | anchors = this.cursor :: this.anchors }
+
+
+removeAnchor : Plane -> Plane
+removeAnchor (Plane this) =
+    Plane { this | anchors = List.drop 1 this.anchors }
 
 
 return : Plane -> Plane
 return (Plane this) =
-    Plane { this | cursor = this.anchor }
+    Plane
+        { this
+            | cursor =
+                this.anchors
+                    |> List.head
+                    |> Maybe.withDefault Point2d.origin
+        }
 
 
 place :
@@ -147,7 +159,11 @@ shiftTo id (Plane this) =
     this.cluster
         |> Cluster.location id
         |> Maybe.map
-            (\point -> { this | cursor = point })
+            (\point ->
+                { this
+                    | cursor = point
+                }
+            )
         |> Maybe.map Plane
 
 

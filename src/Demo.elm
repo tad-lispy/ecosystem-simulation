@@ -13,6 +13,7 @@ import Ecosystem
         , Id
         , Image
         , Interaction
+        , Spawn(..)
         )
 import Force exposing (Force, Newtons)
 import Length exposing (Length, Meters)
@@ -49,7 +50,12 @@ updateActor inspect duration id this groups interactions =
                 (Duration.seconds 1)
                 (Length.meters 5)
 
-        direction =
+        distance =
+            Quantity.for
+                duration
+                speed
+
+        nearest =
             groups
                 |> List.sortBy
                     (.position
@@ -57,26 +63,66 @@ updateActor inspect duration id this groups interactions =
                         >> Length.inMeters
                     )
                 |> List.head
+
+        direction =
+            nearest
                 |> Maybe.map .position
                 |> Maybe.andThen Vector2d.direction
                 |> Maybe.map Direction2d.reverse
-                |> Maybe.withDefault Direction2d.positiveY
-
-        distance =
-            Quantity.for
-                duration
-                speed
 
         movement =
-            Vector2d.withLength
-                distance
-                direction
+            direction
+                |> Maybe.map (Vector2d.withLength distance)
+                |> Maybe.withDefault Vector2d.zero
+
+        spawn =
+            case direction of
+                Nothing ->
+                    [ { actor = this
+                      , displacement = Vector2d.meters 3 0
+                      , interactions = []
+                      }
+                    , { actor = this
+                      , displacement = Vector2d.meters 0 3
+                      , interactions = []
+                      }
+                    , { actor = this
+                      , displacement = Vector2d.meters -3 0
+                      , interactions = []
+                      }
+                    , { actor = this
+                      , displacement = Vector2d.meters 0 -3
+                      , interactions = []
+                      }
+                    ]
+                        |> List.map Spawn
+
+                Just away ->
+                    if
+                        nearest
+                            |> Maybe.map .position
+                            |> Maybe.map Vector2d.length
+                            |> Maybe.withDefault zero
+                            |> Quantity.greaterThan (Length.meters 50)
+                    then
+                        [ { actor = this
+                          , displacement =
+                                Vector2d.withLength
+                                    (Length.meters 2)
+                                    away
+                          , interactions = []
+                          }
+                        ]
+                            |> List.map Spawn
+
+                    else
+                        []
     in
     ActorUpdate
         { change = Unchanged
         , movement = movement
         , interactions = []
-        , spawn = []
+        , spawn = spawn
         }
 
 
@@ -95,7 +141,7 @@ init =
             ()
     in
     Ecosystem.grid
-        10
-        10
+        1
+        1
         (Length.meters 10)
         constructor

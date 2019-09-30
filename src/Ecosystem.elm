@@ -8,6 +8,7 @@ module Ecosystem exposing
     , Interaction
     , Program
     , Setup
+    , Spawn(..)
     , grid
     , simulation
     )
@@ -80,6 +81,7 @@ type alias Model actor action =
     , interactions : InteractionsRegister action
     , paused : Bool
     , actors : IntDict actor
+    , seed : Id
     , selected : Maybe Id
     }
 
@@ -106,12 +108,20 @@ type alias Image =
     }
 
 
+type Spawn actor action
+    = Spawn
+        { actor : actor
+        , interactions : List (Interaction action)
+        , displacement : Vector2d Meters Coordinates
+        }
+
+
 type ActorUpdate actor action
     = ActorUpdate
         { change : Change actor
         , interactions : List (Interaction action)
         , movement : Vector2d Meters Coordinates
-        , spawn : List (ActorUpdate actor action)
+        , spawn : List (Spawn actor action)
         }
 
 
@@ -136,6 +146,7 @@ init setup _ =
             { surface = WrappedPlane.empty setup.size
             , interactions = IntDict.empty
             , actors = IntDict.empty
+            , seed = 0
             , paused = False
             , selected = Nothing
             }
@@ -165,6 +176,7 @@ init setup _ =
                                 (registerInteraction id)
                                 model.interactions
                                 interactions
+                        , seed = id + 1
                     }
 
                 Removed ->
@@ -207,6 +219,10 @@ update setup msg model =
                 inspect id =
                     IntDict.get id model.actors
 
+                actorUpades =
+                    model.actors
+                        |> IntDict.map updateActor
+
                 updateActor :
                     Id
                     -> actor
@@ -246,44 +262,84 @@ update setup msg model =
                     -> Model actor action
                     -> Model actor action
                 applyActorUpdate id (ActorUpdate actorUpdate) memo =
-                    case actorUpdate.change of
-                        Unchanged ->
-                            { memo
-                                | actors = memo.actors
-                                , surface =
-                                    memo.surface
-                                        |> WrappedPlane.shiftTo id
-                                        |> Maybe.map (WrappedPlane.shift actorUpdate.movement)
-                                        |> Maybe.map (WrappedPlane.place id)
-                                        |> Maybe.withDefault memo.surface
-                                        |> WrappedPlane.return
-                            }
+                    let
+                        withActorUpdated =
+                            case actorUpdate.change of
+                                Unchanged ->
+                                    { memo
+                                        | actors =
+                                            memo.actors
+                                        , surface =
+                                            memo.surface
+                                                |> WrappedPlane.shiftTo id
+                                                |> Maybe.map (WrappedPlane.shift actorUpdate.movement)
+                                                |> Maybe.map (WrappedPlane.place id)
+                                                |> Maybe.withDefault memo.surface
+                                    }
 
-                        Changed actor ->
-                            { memo
-                                | actors =
-                                    memo.actors
-                                        |> IntDict.insert id actor
-                                , surface =
-                                    memo.surface
-                                        |> WrappedPlane.shiftTo id
-                                        |> Maybe.map (WrappedPlane.shift actorUpdate.movement)
-                                        |> Maybe.map (WrappedPlane.place id)
-                                        |> Maybe.withDefault memo.surface
-                                        |> WrappedPlane.return
-                            }
+                                Changed actor ->
+                                    { memo
+                                        | actors =
+                                            memo.actors
+                                                |> IntDict.insert id actor
+                                        , surface =
+                                            memo.surface
+                                                |> WrappedPlane.shiftTo id
+                                                |> Maybe.map (WrappedPlane.shift actorUpdate.movement)
+                                                |> Maybe.map (WrappedPlane.place id)
+                                                |> Maybe.withDefault memo.surface
+                                    }
 
-                        Removed ->
-                            { memo
-                                | actors =
-                                    IntDict.remove id memo.actors
-                                , surface =
-                                    WrappedPlane.remove id memo.surface
-                            }
+                                Removed ->
+                                    { memo
+                                        | actors =
+                                            IntDict.remove id memo.actors
+                                        , surface =
+                                            WrappedPlane.remove id memo.surface
+                                    }
+                    in
+                    addSpawns actorUpdate.spawn withActorUpdated
+
+                addSpawns :
+                    List (Spawn actor action)
+                    -> Model actor action
+                    -> Model actor action
+                addSpawns spawns memo =
+                    spawns
+                        |> List.foldl
+                            addSpawn
+                            { memo | surface = WrappedPlane.placeAnchor memo.surface }
+                        |> resetAnchor
+
+                addSpawn :
+                    Spawn actor action
+                    -> Model actor action
+                    -> Model actor action
+                addSpawn (Spawn spawn) memo =
+                    { memo
+                        | actors = IntDict.insert memo.seed spawn.actor memo.actors
+                        , surface =
+                            memo.surface
+                                |> WrappedPlane.shift spawn.displacement
+                                |> WrappedPlane.place memo.seed
+                                |> WrappedPlane.return
+                        , seed = memo.seed + 1
+                    }
+
+                resetAnchor :
+                    Model actor action
+                    -> Model actor action
+                resetAnchor memo =
+                    { memo
+                        | surface =
+                            memo.surface
+                                |> WrappedPlane.return
+                                |> WrappedPlane.removeAnchor
+                    }
             in
-            ( model.actors
-                |> IntDict.map updateActor
+            ( actorUpades
                 |> IntDict.foldl applyActorUpdate model
+                |> resetAnchor
             , Cmd.none
             )
 
