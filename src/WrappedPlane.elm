@@ -77,11 +77,6 @@ place id (Plane this) =
             this.cluster
                 |> Cluster.remove id
                 |> Cluster.insert this.cursor id
-
-        _ =
-            cluster
-                |> debug
-                |> Debug.log "After insert"
     in
     Plane
         { this
@@ -198,7 +193,6 @@ clusters precision (Plane universe) =
                       , members = ids
                       }
                     ]
-                        |> Debug.log "Got to the bottom of the problem. A singleton."
 
                 Cluster size locations subClusters ->
                     let
@@ -207,7 +201,6 @@ clusters precision (Plane universe) =
 
                         center =
                             Point2d.xy half half
-                                |> Debug.log "Center is at"
 
                         position =
                             from universe.size viewpoint center
@@ -225,7 +218,6 @@ clusters precision (Plane universe) =
                           , members = ids
                           }
                         ]
-                            |> Debug.log "Enough searching. Here is a cluster."
 
                     else
                         let
