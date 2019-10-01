@@ -23,6 +23,8 @@ elm instell avh4/elm-color
 
 > I think it's easiest to explain by showing an example. It is written with an Elm beginner (maybe even a non-programmer). If you would rather jump straight into API docs then head to the package page (TODO: not there yet, sorry). 
 
+> Note: The API present below is not ready yet. Its a vision of how things will work in the future. To see how it works now see the `src/Demo.elm` file.
+
 Let's build a simple simulations. Start by [installing Elm](https://guide.elm-lang.org/install.html) and setting up a project:
 
 ```sh
