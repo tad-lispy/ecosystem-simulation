@@ -1,4 +1,4 @@
-module Demo exposing (main)
+module Demos.Main exposing (main)
 
 import Angle exposing (Angle)
 import Color exposing (Color)
@@ -6,14 +6,14 @@ import Direction2d exposing (Direction2d)
 import Duration exposing (Duration)
 import Ecosystem
     exposing
-        ( ActorUpdate(..)
+        ( ActorUpdate
         , Change(..)
         , Coordinates
         , Group
         , Id
         , Image
         , Interaction
-        , Spawn(..)
+        , Spawn
         )
 import Force exposing (Force, Newtons)
 import Length exposing (Length, Meters)
@@ -118,12 +118,11 @@ updateActor inspect duration id this groups interactions =
                     else
                         []
     in
-    ActorUpdate
-        { change = Unchanged
-        , movement = movement
-        , interactions = []
-        , spawn = spawn
-        }
+    { change = Unchanged
+    , movement = movement
+    , interactions = []
+    , spawn = spawn
+    }
 
 
 paintActor : actor -> Image

@@ -1,4 +1,5 @@
 entries := src/index.html
+demos := src/Demos/*.elm
 
 .PHONY: all
 all: .installed dist
@@ -17,12 +18,13 @@ install:
 # Run development server
 .PHONY: develop
 develop: .installed
-	npx parcel ${entries}
+	# TODO: Pass the list of demos to html or js code somehow to allow dynamic switching of the demo.
+	npx parcel ${entries} ${demos}
 
 # Build distribution files and place them where they are expected
 .PHONY: dist
 dist: .installed
-	npx parcel build --public-url . ${entries}
+	npx parcel build --public-url . ${entries} ${demos}
 
 .PHONY: serve
 serve: .installed dist

@@ -1,5 +1,5 @@
 module Ecosystem exposing
-    ( ActorUpdate(..)
+    ( ActorUpdate
     , Change(..)
     , Coordinates
     , Group
@@ -8,7 +8,7 @@ module Ecosystem exposing
     , Interaction
     , Program
     , Setup
-    , Spawn(..)
+    , Spawn
     , grid
     , simulation
     )
@@ -66,7 +66,7 @@ type alias Setup actor action =
         -> List Group
         -> List (Interaction action)
         -> ActorUpdate actor action
-    , init : List (ActorUpdate actor action)
+    , init : List (Spawn actor action)
     , paintActor : actor -> Image
     , size : Length
     }
@@ -108,21 +108,19 @@ type alias Image =
     }
 
 
-type Spawn actor action
-    = Spawn
-        { actor : actor
-        , interactions : List (Interaction action)
-        , displacement : Vector2d Meters Coordinates
-        }
+type alias Spawn actor action =
+    { actor : actor
+    , interactions : List (Interaction action)
+    , displacement : Vector2d Meters Coordinates
+    }
 
 
-type ActorUpdate actor action
-    = ActorUpdate
-        { change : Change actor
-        , interactions : List (Interaction action)
-        , movement : Vector2d Meters Coordinates
-        , spawn : List (Spawn actor action)
-        }
+type alias ActorUpdate actor action =
+    { change : Change actor
+    , interactions : List (Interaction action)
+    , movement : Vector2d Meters Coordinates
+    , spawn : List (Spawn actor action)
+    }
 
 
 type alias Coordinates =
@@ -153,34 +151,26 @@ init setup _ =
 
         initReducer :
             Int
-            -> ActorUpdate actor action
+            -> Spawn actor action
             -> Model actor action
             -> Model actor action
-        initReducer id (ActorUpdate { change, interactions, spawn, movement }) model =
-            case change of
-                Unchanged ->
-                    model
-
-                Changed actor ->
-                    { model
-                        | surface =
-                            model.surface
-                                |> WrappedPlane.shift movement
-                                |> WrappedPlane.place id
-                                |> WrappedPlane.return
-                        , actors =
-                            model.actors
-                                |> IntDict.insert id actor
-                        , interactions =
-                            List.foldl
-                                (registerInteraction id)
-                                model.interactions
-                                interactions
-                        , seed = id + 1
-                    }
-
-                Removed ->
-                    model
+        initReducer id spawn model =
+            { model
+                | surface =
+                    model.surface
+                        |> WrappedPlane.shift spawn.displacement
+                        |> WrappedPlane.place id
+                        |> WrappedPlane.return
+                , actors =
+                    model.actors
+                        |> IntDict.insert id spawn.actor
+                , interactions =
+                    List.foldl
+                        (registerInteraction id)
+                        model.interactions
+                        spawn.interactions
+                , seed = id + 1
+            }
     in
     ( List.indexedFoldl initReducer empty setup.init
     , Cmd.none
@@ -231,12 +221,11 @@ update setup msg model =
                     case WrappedPlane.shiftTo id model.surface of
                         Nothing ->
                             -- This should never happen
-                            ActorUpdate
-                                { change = Removed
-                                , movement = Vector2d.zero
-                                , interactions = []
-                                , spawn = []
-                                }
+                            { change = Removed
+                            , movement = Vector2d.zero
+                            , interactions = []
+                            , spawn = []
+                            }
 
                         Just plane ->
                             setup.updateActor
@@ -261,7 +250,7 @@ update setup msg model =
                     -> ActorUpdate actor action
                     -> Model actor action
                     -> Model actor action
-                applyActorUpdate id (ActorUpdate actorUpdate) memo =
+                applyActorUpdate id actorUpdate memo =
                     let
                         withActorUpdated =
                             case actorUpdate.change of
@@ -315,7 +304,7 @@ update setup msg model =
                     Spawn actor action
                     -> Model actor action
                     -> Model actor action
-                addSpawn (Spawn spawn) memo =
+                addSpawn spawn memo =
                     { memo
                         | actors = IntDict.insert memo.seed spawn.actor memo.actors
                         , surface =
@@ -394,7 +383,7 @@ view setup model =
             , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
             , Html.Attributes.style "background" <|
                 Color.toCssString <|
-                    Color.darkBlue
+                    Color.hsl 0.6 0.8 0.1
             , Svg.Events.onClick
                 (if model.paused then
                     Animate 16
@@ -487,7 +476,7 @@ grid :
     -> Int
     -> Length
     -> (Int -> actor)
-    -> List (ActorUpdate actor action)
+    -> List (Spawn actor action)
 grid rows cols distance constructor =
     (rows * cols - 1)
         |> List.range 0
@@ -511,12 +500,10 @@ grid rows cols distance constructor =
                     actor =
                         constructor id
                 in
-                ActorUpdate
-                    { change = Changed actor
-                    , interactions = []
-                    , movement = Vector2d.xy x y
-                    , spawn = []
-                    }
+                { actor = actor
+                , interactions = []
+                , displacement = Vector2d.xy x y
+                }
             )
 
 
