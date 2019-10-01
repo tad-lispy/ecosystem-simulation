@@ -124,7 +124,7 @@ The setup record consists of four fields:
 
 ### Spawn Record
 
-Ok, so what id this whole `Spawn actor action` type? It's a record :
+Ok, so what is this whole `Spawn actor action` type? It's a record :
 
 ```elm
 { actor : actor
@@ -204,7 +204,7 @@ Reload the browser and your actors should march across the screen at a steady pa
 
 ### ActorUpdate Record
 
-Ok, so what id this whole `ActorUpdate actor action` type that we are returning from `updateActor` function? It's a record :
+The `ActorUpdate actor action` type is what we are returning from `updateActor` function on every frame of the simulation. It's a record that describes what happens to each actor. Here is it's type:
 
 ```elm
 { movement : Vector2d
