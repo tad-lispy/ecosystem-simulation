@@ -9,13 +9,17 @@ import Ecosystem
         ( ActorUpdate
         , Change(..)
         , Coordinates
-        , Group
         , Id
         , Image
-        , Interaction
         , Spawn
         )
+import Environment
+    exposing
+        ( Environment
+        , Group
+        )
 import Force exposing (Force, Newtons)
+import Interaction exposing (Interaction)
 import Length exposing (Length, Meters)
 import Mass exposing (Mass)
 import Maybe.Extra as Maybe
@@ -25,7 +29,7 @@ import Speed exposing (MetersPerSecond, Speed)
 import Vector2d exposing (Vector2d)
 
 
-main : Ecosystem.Program () action
+main : Ecosystem.Program Actor Action
 main =
     Ecosystem.simulation
         { size = Length.meters 500
@@ -35,20 +39,28 @@ main =
         }
 
 
+type alias Actor =
+    ()
+
+
+type alias Action =
+    ()
+
+
 updateActor :
-    (Id -> Maybe actor)
-    -> Duration
-    -> Id
-    -> actor
-    -> List Group
-    -> List (Interaction action)
-    -> ActorUpdate actor action
-updateActor inspect duration id this groups interactions =
+    Id
+    -> Actor
+    -> Environment Actor Action
+    -> ActorUpdate Actor Action
+updateActor id this environment =
     let
         speed =
             Quantity.per
                 (Duration.seconds 1)
                 (Length.meters 5)
+
+        duration =
+            Environment.latency environment
 
         distance =
             Quantity.for
@@ -56,7 +68,8 @@ updateActor inspect duration id this groups interactions =
                 speed
 
         nearest =
-            groups
+            environment
+                |> Environment.actors
                 |> List.sortBy
                     (.position
                         >> Vector2d.length
@@ -102,7 +115,7 @@ updateActor inspect duration id this groups interactions =
                             |> Maybe.map .position
                             |> Maybe.map Vector2d.length
                             |> Maybe.withDefault zero
-                            |> Quantity.greaterThan (Length.meters 50)
+                            |> Quantity.greaterThan (Length.meters 20)
                     then
                         [ { actor = this
                           , displacement =
@@ -116,12 +129,11 @@ updateActor inspect duration id this groups interactions =
                     else
                         []
     in
-    
-        { change = Unchanged
-        , movement = movement
-        , interactions = []
-        , spawn = spawn
-        }
+    { change = Unchanged
+    , movement = movement
+    , interactions = []
+    , spawn = spawn
+    }
 
 
 paintActor : actor -> Image

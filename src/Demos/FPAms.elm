@@ -9,10 +9,12 @@ With changes to make it compatible with new version of the framework
 import Color exposing (Color)
 import Direction2d exposing (Direction2d)
 import Ecosystem exposing (..)
+import Environment exposing (Environment)
 import Length exposing (meters)
 import Vector2d
 
 
+main : Ecosystem.Program Actor Action
 main =
     Ecosystem.simulation
         { init = init
@@ -22,6 +24,15 @@ main =
         }
 
 
+type alias Actor =
+    ()
+
+
+type alias Action =
+    ()
+
+
+init : List (Spawn Actor Action)
 init =
     [ { actor = ()
       , displacement = Vector2d.zero
@@ -34,18 +45,16 @@ init =
     ]
 
 
-type alias Actor =
-    ()
-
-
-type alias Action =
-    ()
-
-
-updateActor duration inspect id this groups interactions =
+updateActor :
+    Id
+    -> Actor
+    -> Environment Actor Action
+    -> ActorUpdate Actor Action
+updateActor id this environment =
     let
         nearest =
-            groups
+            environment
+                |> Environment.actors
                 |> List.sortBy
                     (.position
                         >> Vector2d.length
@@ -75,6 +84,7 @@ updateActor duration inspect id this groups interactions =
     }
 
 
+paintActor : Actor -> Ecosystem.Image
 paintActor actor =
     { size = meters 1
     , fill = Color.green

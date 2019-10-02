@@ -2,10 +2,8 @@ module Ecosystem exposing
     ( ActorUpdate
     , Change(..)
     , Coordinates
-    , Group
     , Id
     , Image
-    , Interaction
     , Program
     , Setup
     , Spawn
@@ -19,9 +17,11 @@ import Cluster exposing (Coordinates)
 import Color exposing (Color)
 import Duration exposing (Duration, Seconds)
 import Element exposing (Element)
+import Environment exposing (Environment)
 import Html exposing (Html)
 import Html.Attributes
 import IntDict exposing (IntDict)
+import Interaction exposing (Interaction)
 import Json.Decode
 import Length exposing (Length, Meters)
 import List.Extra as List
@@ -59,12 +59,9 @@ type alias Resolution =
 
 type alias Setup actor action =
     { updateActor :
-        (Id -> Maybe actor)
-        -> Duration
-        -> Id
+        Id
         -> actor
-        -> List Group
-        -> List (Interaction action)
+        -> Environment actor action
         -> ActorUpdate actor action
     , init : List (Spawn actor action)
     , paintActor : actor -> Image
@@ -78,7 +75,7 @@ type alias Flags =
 
 type alias Model actor action =
     { surface : Plane
-    , interactions : InteractionsRegister action
+    , interactions : Interaction.Register action
     , paused : Bool
     , actors : IntDict actor
     , seed : Id
@@ -88,17 +85,6 @@ type alias Model actor action =
 
 type alias Id =
     Int
-
-
-type alias Interaction action =
-    { other : Id
-    , action : action
-    }
-
-
-type alias Group =
-    -- Alias and re-expose
-    WrappedPlane.Group
 
 
 type alias Image =
@@ -166,7 +152,7 @@ init setup _ =
                         |> IntDict.insert id spawn.actor
                 , interactions =
                     List.foldl
-                        (registerInteraction id)
+                        (Interaction.register id)
                         model.interactions
                         spawn.interactions
                 , seed = id + 1
@@ -175,10 +161,6 @@ init setup _ =
     ( List.indexedFoldl initReducer empty setup.init
     , Cmd.none
     )
-
-
-type alias InteractionsRegister action =
-    IntDict (List (Interaction action))
 
 
 type Msg
@@ -196,8 +178,12 @@ update setup msg model =
     case msg of
         Animate delta ->
             let
-                duration : Duration
-                duration =
+                _ =
+                    model.actors
+                        |> IntDict.size
+
+                latency : Duration
+                latency =
                     -- If the frame rate drops below 30fps then slow down the
                     -- animation but retain precision. Otherwise there is too
                     -- much noise and things get wild.
@@ -228,22 +214,14 @@ update setup msg model =
                             }
 
                         Just plane ->
-                            setup.updateActor
-                                inspect
-                                duration
-                                id
-                                actor
-                                (plane
-                                    |> WrappedPlane.clusters 0.9
-                                    |> List.filter
-                                        (\group ->
-                                            group.position /= Vector2d.zero
-                                        )
-                                )
-                                (model.interactions
-                                    |> IntDict.get id
-                                    |> Maybe.withDefault []
-                                )
+                            model.interactions
+                                |> IntDict.get id
+                                |> Maybe.withDefault []
+                                |> Environment.create
+                                    model.actors
+                                    plane
+                                    latency
+                                |> setup.updateActor id actor
 
                 applyActorUpdate :
                     Id
@@ -505,19 +483,3 @@ grid rows cols distance constructor =
                 , displacement = Vector2d.xy x y
                 }
             )
-
-
-registerInteraction :
-    Id
-    -> Interaction action
-    -> InteractionsRegister action
-    -> InteractionsRegister action
-registerInteraction actor { other, action } register =
-    let
-        interactions =
-            register
-                |> IntDict.get other
-                |> Maybe.withDefault []
-                |> (::) { other = actor, action = action }
-    in
-    IntDict.insert other interactions register

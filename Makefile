@@ -19,7 +19,7 @@ install:
 .PHONY: develop
 develop: .installed
 	# TODO: Pass the list of demos to html or js code somehow to allow dynamic switching of the demo.
-	npx parcel ${entries} ${demos}
+	npx parcel ${entries} 
 
 # Build distribution files and place them where they are expected
 .PHONY: dist
@@ -32,5 +32,5 @@ serve: .installed dist
 
 # Nuke from orbit
 clean:
-	rm -rf elm-stuff/ dist/ node_modules/
+	rm -rf elm-stuff/ dist/ node_modules/ .cache/
 	rm -f .installed
