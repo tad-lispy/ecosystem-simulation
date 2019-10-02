@@ -32,5 +32,5 @@ serve: .installed dist
 
 # Nuke from orbit
 clean:
-	rm -rf elm-stuff/ dist/ node_modules/
+	rm -rf elm-stuff/ dist/ node_modules/ .cache/
 	rm -f .installed
