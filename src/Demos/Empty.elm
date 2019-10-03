@@ -5,6 +5,7 @@ import Ecosystem exposing (ActorUpdate, Change(..), Id, Spawn)
 import Environment exposing (Environment)
 import Interaction exposing (Interaction)
 import Length exposing (Length, meters)
+import Speed exposing (metersPerSecond)
 import Vector2d exposing (Vector2d)
 
 
@@ -22,7 +23,7 @@ init =
 
 
 updateActor id this environment =
-    { movement = Vector2d.zero
+    { velocity = Vector2d.zero
     , change = Unchanged
     , spawn = []
     , interactions = []

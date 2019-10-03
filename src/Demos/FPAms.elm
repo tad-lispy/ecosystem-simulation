@@ -11,6 +11,7 @@ import Direction2d exposing (Direction2d)
 import Ecosystem exposing (..)
 import Environment exposing (Environment)
 import Length exposing (meters)
+import Speed exposing (metersPerSecond)
 import Vector2d
 
 
@@ -67,18 +68,18 @@ updateActor id this environment =
                 |> Maybe.map .position
                 |> Maybe.andThen Vector2d.direction
 
-        movement =
+        velocity =
             case direction of
                 Nothing ->
                     Vector2d.zero
 
                 Just d ->
                     Vector2d.withLength
-                        (meters 0.5)
+                        (metersPerSecond 0.5)
                         (Direction2d.reverse d)
     in
     { change = Unchanged
-    , movement = movement
+    , velocity = velocity
     , spawn = []
     , interactions = []
     }
