@@ -1,32 +1,18 @@
 module Demos.Main exposing (main)
 
-import Angle exposing (Angle)
-import Color exposing (Color)
-import Direction2d exposing (Direction2d)
-import Duration exposing (Duration)
+import Color
+import Direction2d
 import Ecosystem
     exposing
-        ( ActorUpdate
-        , Change(..)
-        , Coordinates
-        , Id
+        ( Change(..)
         , Image
-        , Spawn
         )
 import Environment
-    exposing
-        ( Environment
-        , Group
-        )
-import Force exposing (Force, Newtons)
-import Interaction exposing (Interaction)
-import Length exposing (Length, Meters)
-import Mass exposing (Mass)
+import Length
 import Maybe.Extra as Maybe
-import Quantity exposing (Quantity, Rate, zero)
-import Set exposing (Set)
-import Speed exposing (MetersPerSecond, Speed)
-import Vector2d exposing (Vector2d)
+import Quantity
+import Speed exposing (metersPerSecond)
+import Vector2d
 
 
 main : Ecosystem.Program Actor Action
@@ -47,25 +33,10 @@ type alias Action =
     ()
 
 
-updateActor :
-    Id
-    -> Actor
-    -> Environment Actor Action
-    -> ActorUpdate Actor Action
 updateActor id this environment =
     let
         speed =
-            Quantity.per
-                (Duration.seconds 1)
-                (Length.meters 5)
-
-        duration =
-            Environment.latency environment
-
-        distance =
-            Quantity.for
-                duration
-                speed
+            metersPerSecond 5
 
         nearest =
             environment
@@ -83,9 +54,9 @@ updateActor id this environment =
                 |> Maybe.andThen Vector2d.direction
                 |> Maybe.map Direction2d.reverse
 
-        movement =
+        velocity =
             direction
-                |> Maybe.map (Vector2d.withLength distance)
+                |> Maybe.map (Vector2d.withLength speed)
                 |> Maybe.withDefault Vector2d.zero
 
         spawn =
@@ -113,9 +84,9 @@ updateActor id this environment =
                     if
                         nearest
                             |> Maybe.map .position
-                            |> Maybe.map Vector2d.length
-                            |> Maybe.withDefault zero
-                            |> Quantity.greaterThan (Length.meters 20)
+                            |> Maybe.withDefault Vector2d.zero
+                            |> Vector2d.length
+                            |> Quantity.greaterThan (Length.meters 50)
                     then
                         [ { actor = this
                           , displacement =
@@ -130,7 +101,7 @@ updateActor id this environment =
                         []
     in
     { change = Unchanged
-    , movement = movement
+    , velocity = velocity
     , interactions = []
     , spawn = spawn
     }

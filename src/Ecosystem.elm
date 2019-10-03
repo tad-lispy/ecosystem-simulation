@@ -29,6 +29,7 @@ import Maybe.Extra as Maybe
 import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
 import Quantity exposing (Quantity, Rate, zero)
+import Speed exposing (MetersPerSecond, Speed)
 import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
@@ -104,7 +105,7 @@ type alias Spawn actor action =
 type alias ActorUpdate actor action =
     { change : Change actor
     , interactions : List (Interaction action)
-    , movement : Vector2d Meters Coordinates
+    , velocity : Vector2d MetersPerSecond Coordinates
     , spawn : List (Spawn actor action)
     }
 
@@ -208,7 +209,7 @@ update setup msg model =
                         Nothing ->
                             -- This should never happen
                             { change = Removed
-                            , movement = Vector2d.zero
+                            , velocity = Vector2d.zero
                             , interactions = []
                             , spawn = []
                             }
@@ -239,7 +240,11 @@ update setup msg model =
                                         , surface =
                                             memo.surface
                                                 |> WrappedPlane.shiftTo id
-                                                |> Maybe.map (WrappedPlane.shift actorUpdate.movement)
+                                                |> Maybe.map
+                                                    (actorUpdate.velocity
+                                                        |> Vector2d.for latency
+                                                        |> WrappedPlane.shift
+                                                    )
                                                 |> Maybe.map (WrappedPlane.place id)
                                                 |> Maybe.withDefault memo.surface
                                     }
@@ -252,7 +257,11 @@ update setup msg model =
                                         , surface =
                                             memo.surface
                                                 |> WrappedPlane.shiftTo id
-                                                |> Maybe.map (WrappedPlane.shift actorUpdate.movement)
+                                                |> Maybe.map
+                                                    (actorUpdate.velocity
+                                                        |> Vector2d.for latency
+                                                        |> WrappedPlane.shift
+                                                    )
                                                 |> Maybe.map (WrappedPlane.place id)
                                                 |> Maybe.withDefault memo.surface
                                     }
