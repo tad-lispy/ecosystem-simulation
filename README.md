@@ -1,6 +1,6 @@
 # Actor Based Simulation Kit 
 
-A framework for creating simulations of systems consisting of autonomous actors interacting with each other (e.g. an ecosystem).
+A framework for creating simulations of systems consisting of autonomous actors interacting with each other (e.g. an ecosystem). See [live demo](https://tad-lispy.gitlab.io/ecosystem-simulation/).
 
 ## Installation
 
