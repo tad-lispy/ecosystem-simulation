@@ -30,6 +30,10 @@ dist: .installed
 serve: .installed dist
 	npx serve dist/
 
+.PHONY: doc-preview
+doc-preview: .installed
+	npx elm-doc-preview
+
 # Nuke from orbit
 clean:
 	rm -rf elm-stuff/ dist/ node_modules/ .cache/
