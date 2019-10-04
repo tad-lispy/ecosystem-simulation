@@ -10,12 +10,12 @@ It's an Elm package. Install it the usual way:
 elm install tad-lispy/elm-actors-simulation
 ```
 
-For physical calculations (length, velocity, mass, etc.) we are using excelent [Units](https://package.elm-lang.org/packages/ianmackenzie/elm-units/latest/) and [Geometry](https://package.elm-lang.org/packages/ianmackenzie/elm-geometry/latest/) packages by @ianmackenzie and to control colors the [Color](https://package.elm-lang.org/packages/avh4/elm-color/latest/) package by @avh4. You will need them too:
+For physical calculations (length, velocity, mass, etc.) we are using excellent [Units](https://package.elm-lang.org/packages/ianmackenzie/elm-units/latest/) and [Geometry](https://package.elm-lang.org/packages/ianmackenzie/elm-geometry/latest/) packages by @ianmackenzie and to control colors the [Color](https://package.elm-lang.org/packages/avh4/elm-color/latest/) package by @avh4. You will need them too:
 
 ```sh
-elm instell ianmackenzie/elm-units
-elm instell ianmackenzie/elm-geometry
-elm instell avh4/elm-color
+elm install ianmackenzie/elm-units
+elm install ianmackenzie/elm-geometry
+elm install avh4/elm-color
 ```
 
 
@@ -78,7 +78,7 @@ updateActor id this environment =
 
 
 paintActor actor =
-    { size = meters 0.2
+    { size = meters 2
     , fill = Color.lightBlue
     , stroke = Color.blue
     }
@@ -100,11 +100,11 @@ The setup record consists of four fields:
 
 - `size : Length`
 
-  The simulation takes place on a square wrapped plane. This field defines how long is the edge of this square. Basically how big is the simulated world. To express the size we need the `Length` module imported on top of our file and its `meters` function - to get lenght in meters.
+  The simulation takes place on a square wrapped plane. This field defines how long is the edge of this square. Basically how big is the simulated world. To express the size we need the `Length` module imported on top of our file and its `meters` function - to get length in meters.
 
 - `init : List (Spawn actor action)`
 
-  The initial setup of the simulation. We will discuss the `Spawn actor action` type in a moment. The number of elements in this list will translate to number of actors present at the beginning of the simulation. Later this actors can spawn new actors or remove themselves, but we need to start the whole show somehow. Since the list is empty, there are no actors - hence the empty screen.
+  The initial setup of the simulation. We will discuss the `Spawn actor action` type in a moment. The number of elements in this list will translate to number of actors present at the beginning of the simulation. Later these actors can spawn new actors or remove themselves, but we need to start the whole show somehow. Since the list is empty, there are no actors - hence the empty screen.
 
 - `updateActor : Environment actor action -> Id -> Update actor action`
 
@@ -120,7 +120,7 @@ The setup record consists of four fields:
 
   - `self : Change actor`
   - `velocity : Vector2d MetersPerSecond Coordinates`
-  - `interactions : List (Interaction action`
+  - `interactions : List (Interaction action)`
   - `spawn : List (Spawn actor action)`
 
   We will discuss it in a moment (I promise!).
@@ -149,7 +149,7 @@ Ok, so what is this whole `Spawn actor action` type? It's a record :
 
 The `actor` field controls what is the initial state of the new actor. We will need to come up with some type of value that will describe our actors.
 
-The `displacement` controls how far and in what direction the new actor will spawn relative to its parent. The initial actors have no parents, so they will spawn in an arbitrary point (lets call it the origin). You can use displacement to move them away from this point, so that if you have more than one actor, they don't end up all in one place.
+The `displacement` controls how far and in what direction the new actor will spawn relative to its parent. The initial actors have no parents, so they will spawn in an arbitrary point (let's call it the origin). You can use displacement to move them away from this point, so that if you have more than one actor, they don't end up all in one place.
 
 Newly spawned actors can immediately interact with other actors. You could use the `interactions` field for that, but for now let's not do this. It's a list, so we can simply set it to `[]` - no interactions.
 
@@ -170,7 +170,7 @@ Now we can plug these types in to our program:
 ```elm
 init =
     [ { actor = ()
-      , displacement = Vector.zero
+      , displacement = Vector2d.zero
       , interactions = []
       }
     ]
@@ -178,45 +178,43 @@ init =
 
 That should be enough to produce a single actor - although without much agency yet. Reload the browser and observe a single motionless blue dot in the middle of the screen.  
 
-Let's add another one five meters to the north.
+Let's place another actor five meters to the north of the first one.
 
 ```elm
 init =
   [ ... 
-  , Update
-      { velocity = Vector2d.meters 5 0
-      , ...
+    , { actor = ()
+      , displacement = Vector2d.meters 0 -5
+      , interactions = []
       }
   ]
 ```
 
-The `...` means that you should just leave the same code as there was before - don't type it literally. And now we have two perfectly still colors. Let's give them some agency. For this we need to change the `updateActor` function. For starters let's make the actors go east with a speed of 0,5 m/s:
+The `...` means that you should just leave the same code as there was before - don't type it literally. And now we have two perfectly still actors. Let's give them some agency. For this we need to change the `updateActor` function. Import Speed and Direction2d modules. For starters let's make the actors go east with a speed of 5 m/s:
 
 ### Let Them Move!
 
 ```elm
-updateActor environment id =
-    let 
-        duration = 
-            Ecosystem.latency environment
-
+updateActor id this environment =
+    let
         speed =
-            Speed.metersPerSecond 0.5
-
+            Speed.metersPerSecond 5
 
         velocity =
-            Vector2d.meters speed 0
+            Vector2d.withLength speed Direction2d.positiveX
     in
     { velocity = velocity
-      ...
+    , change = Unchanged
+    , spawn = []
+    , interactions = []
     }
 ```
 
-Reload the browser and your actors should march across the screen at a steady pace of 50cm per second. By this I mean 50cm in their world - on your screen it will be much smaller distance. Everything is scaled. Notice that once they reach the "edge" they will re-appear on the other side. That's what I mean by wrapped plane. It works the same for left-right and up-down movement. In fact for the actors there is no such thing as the edge of the world - just like there is no such thing as the edge of the earth for us (take that, flat-earthers 🌍)
+Reload the browser and your actors should march across the screen at a steady pace of 5m per second. By this I mean 5m in their world - on your screen it will be much smaller distance. Everything is scaled. Notice that once they reach the "edge" they will re-appear on the other side. That's what I mean by wrapped plane. It works the same for left-right and up-down movement. In fact for the actors there is no such thing as the edge of the world - just like there is no such thing as the edge of the earth for us (take that, flat-earthers 🌍)
 
 ### ActorUpdate Record
 
-The `ActorUpdate actor action` type is what we are returning from `updateActor` function on every frame of the simulation. It's a record that describes what happens to each actor. Here is it's type:
+The `ActorUpdate actor action` type is what we are returning from `updateActor` function on every frame of the simulation. It's a record that describes what happens to each actor. Here is its type:
 
 ```elm
 { velocity : Vector2d MetersPerSecond Coordinates
@@ -248,7 +246,7 @@ The `spawns` field allows the actor to create new actors. It's a List of `Spawn 
 
 ### A Challenge
 
-I hope you didn't find it too difficult so far, but also let's agree that it's not a very interesting yet simulation yet. Our actors are pretty dumb and stubborn. How about giving them the following behaviours:
+I hope you didn't find it too difficult so far, but also let's agree that it's not a very interesting simulation yet. Our actors are pretty dumb and stubborn. How about giving them the following behaviours:
 
 - They will move away from each other, as if disgusted by one another.
 
@@ -445,6 +443,18 @@ type alias Action =
     ()
 
 
+init =
+    [ { actor = ()
+      , displacement = Vector2d.zero
+      , interactions = []
+      }
+    , { actor = ()
+      , displacement = Vector2d.meters 0 -5
+      , interactions = []
+      }
+    ]
+
+
 updateActor id this environment =
     let
         speed =
@@ -526,18 +536,6 @@ paintActor actor =
     , stroke = Color.green
     }
 
-
-init =
-    let
-        constructor : Int -> ()
-        constructor id =
-            ()
-    in
-    Ecosystem.grid
-        1
-        1
-        (Length.meters 10)
-        constructor
 ```
 
 Let's reload the browser and see! Hopefully they behave the way we wanted them to. And  if we wait long enough the actors will fill the space more or less evenly and stop reproducing. That's interestingly because we didn't directly program them to do so. We have just instilled a deeply rooted hatred to one another and strong urge to reproduce. And here they are conquerring the world and exploiting every last bit of it. Maybe there is a lesson here? 
