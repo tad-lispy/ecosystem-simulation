@@ -4,6 +4,10 @@ A framework for creating simulations of systems consisting of autonomous actors 
 
 ## Installation
 
+> NOTE: This is not yet published to packages.elm-lang.org so below instructions won't work. I'm still waiting for community feedback before I publish. If you have any, please share it here (open an issue) or via [Elm Discourse](https://discourse.elm-lang.org/t/actor-based-simulation-framework/4437).
+>
+> Below is a concept for the future installation procedure. If you want to play with this framework then simply clone the repository and follow the tutorial below. You don't need to install anything.
+
 It's an Elm package. Install it the usual way:
 
 ```sh
