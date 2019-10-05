@@ -2,7 +2,7 @@ entries := src/index.html
 demos := src/Demos/*.elm
 
 .PHONY: all
-all: .installed dist
+all: .installed clean-cache dist
 
 .PHONY: install
 install:
@@ -30,7 +30,14 @@ dist: .installed
 serve: .installed dist
 	npx serve dist/
 
+.PHONY: doc-preview
+doc-preview: .installed
+	npx elm-doc-preview
+
 # Nuke from orbit
 clean:
 	rm -rf elm-stuff/ dist/ node_modules/ .cache/
 	rm -f .installed
+
+clean-cache:
+	rm -rf .cache/ dist/

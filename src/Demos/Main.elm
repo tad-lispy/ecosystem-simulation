@@ -1,38 +1,19 @@
-module Demos.Main exposing (main)
+module Main exposing (main)
 
-import Angle exposing (Angle)
-import Color exposing (Color)
-import Direction2d exposing (Direction2d)
-import Duration exposing (Duration)
-import Ecosystem
-    exposing
-        ( ActorUpdate
-        , Change(..)
-        , Coordinates
-        , Id
-        , Image
-        , Spawn
-        )
+import Color
+import Direction2d
+import Ecosystem exposing (Change(..))
 import Environment
-    exposing
-        ( Environment
-        , Group
-        )
-import Force exposing (Force, Newtons)
-import Interaction exposing (Interaction)
-import Length exposing (Length, Meters)
-import Mass exposing (Mass)
-import Maybe.Extra as Maybe
-import Quantity exposing (Quantity, Rate, zero)
-import Set exposing (Set)
-import Speed exposing (MetersPerSecond, Speed)
-import Vector2d exposing (Vector2d)
+import Length exposing (meters)
+import Quantity
+import Speed exposing (metersPerSecond)
+import Vector2d
 
 
 main : Ecosystem.Program Actor Action
 main =
     Ecosystem.simulation
-        { size = Length.meters 500
+        { size = meters 500
         , updateActor = updateActor
         , paintActor = paintActor
         , init = init
@@ -47,25 +28,22 @@ type alias Action =
     ()
 
 
-updateActor :
-    Id
-    -> Actor
-    -> Environment Actor Action
-    -> ActorUpdate Actor Action
+init =
+    [ { actor = ()
+      , displacement = Vector2d.zero
+      , interactions = []
+      }
+    , { actor = ()
+      , displacement = Vector2d.meters -5 0
+      , interactions = []
+      }
+    ]
+
+
 updateActor id this environment =
     let
         speed =
-            Quantity.per
-                (Duration.seconds 1)
-                (Length.meters 5)
-
-        duration =
-            Environment.latency environment
-
-        distance =
-            Quantity.for
-                duration
-                speed
+            metersPerSecond 5
 
         nearest =
             environment
@@ -83,9 +61,9 @@ updateActor id this environment =
                 |> Maybe.andThen Vector2d.direction
                 |> Maybe.map Direction2d.reverse
 
-        movement =
+        velocity =
             direction
-                |> Maybe.map (Vector2d.withLength distance)
+                |> Maybe.map (Vector2d.withLength speed)
                 |> Maybe.withDefault Vector2d.zero
 
         spawn =
@@ -113,14 +91,14 @@ updateActor id this environment =
                     if
                         nearest
                             |> Maybe.map .position
-                            |> Maybe.map Vector2d.length
-                            |> Maybe.withDefault zero
-                            |> Quantity.greaterThan (Length.meters 20)
+                            |> Maybe.withDefault Vector2d.zero
+                            |> Vector2d.length
+                            |> Quantity.greaterThan (meters 50)
                     then
                         [ { actor = this
                           , displacement =
                                 Vector2d.withLength
-                                    (Length.meters 2)
+                                    (meters 2)
                                     away
                           , interactions = []
                           }
@@ -130,28 +108,14 @@ updateActor id this environment =
                         []
     in
     { change = Unchanged
-    , movement = movement
+    , velocity = velocity
     , interactions = []
     , spawn = spawn
     }
 
 
-paintActor : actor -> Image
 paintActor actor =
-    { size = Length.meters 1
+    { size = meters 1
     , fill = Color.white
     , stroke = Color.green
     }
-
-
-init =
-    let
-        constructor : Int -> ()
-        constructor id =
-            ()
-    in
-    Ecosystem.grid
-        1
-        1
-        (Length.meters 10)
-        constructor
