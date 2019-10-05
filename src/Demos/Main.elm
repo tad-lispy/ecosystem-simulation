@@ -1,17 +1,16 @@
 module Main exposing (main)
 
-import Color exposing (Color)
+import Color
 import Direction2d
-import Ecosystem exposing (ActorUpdate, Change(..), Id, Spawn)
-import Environment exposing (Environment)
-import Interaction exposing (Interaction)
-import Length exposing (Length, meters)
-import Maybe.Extra as Maybe
+import Ecosystem exposing (Change(..))
+import Environment
+import Length exposing (meters)
 import Quantity
-import Speed
-import Vector2d exposing (Vector2d)
+import Speed exposing (metersPerSecond)
+import Vector2d
 
 
+main : Ecosystem.Program Actor Action
 main =
     Ecosystem.simulation
         { size = meters 500
@@ -35,7 +34,7 @@ init =
       , interactions = []
       }
     , { actor = ()
-      , displacement = Vector2d.meters 0 -5
+      , displacement = Vector2d.meters -5 0
       , interactions = []
       }
     ]
@@ -44,7 +43,7 @@ init =
 updateActor id this environment =
     let
         speed =
-            Speed.metersPerSecond 5
+            metersPerSecond 5
 
         nearest =
             environment
@@ -94,12 +93,12 @@ updateActor id this environment =
                             |> Maybe.map .position
                             |> Maybe.withDefault Vector2d.zero
                             |> Vector2d.length
-                            |> Quantity.greaterThan (Length.meters 50)
+                            |> Quantity.greaterThan (meters 50)
                     then
                         [ { actor = this
                           , displacement =
                                 Vector2d.withLength
-                                    (Length.meters 2)
+                                    (meters 2)
                                     away
                           , interactions = []
                           }
@@ -108,16 +107,15 @@ updateActor id this environment =
                     else
                         []
     in
-    { velocity = velocity
-    , change = Unchanged
-    , spawn = spawn
+    { change = Unchanged
+    , velocity = velocity
     , interactions = []
+    , spawn = spawn
     }
 
 
 paintActor actor =
-    { size = Length.meters 1
+    { size = meters 1
     , fill = Color.white
     , stroke = Color.green
     }
-
