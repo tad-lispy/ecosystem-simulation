@@ -16,10 +16,7 @@
             "elm-community/intdict": "3.0.0",
             "elm-community/list-extra": "8.2.2",
             "elm-community/maybe-extra": "5.0.0",
-            "elm-community/result-extra": "2.2.1",
-            "elm-explorations/linear-algebra": "1.0.3",
             "ianmackenzie/elm-geometry": "2.0.0",
-            "ianmackenzie/elm-geometry-svg": "2.0.0",
             "ianmackenzie/elm-units": "2.2.0",
             "mdgriffith/elm-ui": "1.1.5"
         },
