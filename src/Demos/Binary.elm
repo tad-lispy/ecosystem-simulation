@@ -41,15 +41,11 @@ init =
     let
         constructor : Int -> Actor
         constructor index =
-            case modBy 8 index of
-                0 ->
-                    Pretton Vector2d.zero
+            if modBy 10 index < 6 then
+                Pretton Vector2d.zero
 
-                3 ->
-                    Pretton Vector2d.zero
-
-                _ ->
-                    Uglon Vector2d.zero
+            else
+                Uglon Vector2d.zero
     in
     Ecosystem.grid 14 9 (meters 49) constructor
 
