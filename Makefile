@@ -40,4 +40,4 @@ clean:
 	rm -f .installed
 
 clean-cache:
-	rm -rf .cache/ dist/
+	rm -rf .cache/ elm-stuff/ dist/
