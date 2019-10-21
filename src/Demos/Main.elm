@@ -1,4 +1,4 @@
-module Main exposing (main)
+module Demos.Main exposing (main)
 
 import Color
 import Direction2d
