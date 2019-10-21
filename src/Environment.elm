@@ -11,6 +11,7 @@ module Environment exposing
 import Duration exposing (Duration)
 import IntDict exposing (IntDict)
 import Interaction exposing (Interaction)
+import Set exposing (Set)
 import Vector2d exposing (Vector2d)
 import WrappedPlane exposing (Plane)
 
@@ -57,10 +58,6 @@ actors :
 actors (Environment environment) =
     environment.surface
         |> WrappedPlane.clusters 0.99
-        |> List.filter
-            (\group ->
-                group.position /= Vector2d.zero
-            )
 
 
 actor : Id -> Environment actor action -> Maybe actor

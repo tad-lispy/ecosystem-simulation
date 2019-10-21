@@ -17,6 +17,8 @@ import Cluster exposing (Coordinates)
 import Color exposing (Color)
 import Duration exposing (Duration, Seconds)
 import Element exposing (Element)
+import Element.Font as Font
+import Element.Input as Input
 import Environment exposing (Environment)
 import Html exposing (Html)
 import Html.Attributes
@@ -168,6 +170,7 @@ type Msg
     = Animate Float
     | Selected Id
     | Pause
+    | Play
 
 
 update :
@@ -191,10 +194,6 @@ update setup msg model =
                     delta
                         |> min 32
                         |> Duration.milliseconds
-
-                inspect : Id -> Maybe actor
-                inspect id =
-                    IntDict.get id model.actors
 
                 actorUpades =
                     model.actors
@@ -220,7 +219,7 @@ update setup msg model =
                                 |> Maybe.withDefault []
                                 |> Environment.create
                                     model.actors
-                                    plane
+                                    (plane |> WrappedPlane.remove id)
                                     latency
                                 |> setup.updateActor id actor
 
@@ -329,6 +328,11 @@ update setup msg model =
             , Cmd.none
             )
 
+        Play ->
+            ( { model | paused = False }
+            , Cmd.none
+            )
+
 
 subscriptions : Model actor action -> Sub Msg
 subscriptions model =
@@ -342,6 +346,35 @@ subscriptions model =
 view : Setup actor action -> Model actor action -> Html Msg
 view setup model =
     let
+        controls : Element Msg
+        controls =
+            if model.paused then
+                Input.button
+                    [ Font.color (Element.rgb 1 1 1)
+                    , Element.centerX
+                    , Element.centerY
+                    ]
+                    { onPress =
+                        Just
+                            (if model.paused then
+                                Play
+
+                             else
+                                Pause
+                            )
+                    , label =
+                        Element.text
+                            (if model.paused then
+                                "▷"
+
+                             else
+                                "❙❙"
+                            )
+                    }
+
+            else
+                Element.none
+
         resolution =
             Quantity.per
                 (Length.meters 1)
@@ -383,6 +416,7 @@ view setup model =
         |> Element.layout
             [ Element.width Element.fill
             , Element.height Element.fill
+            , Element.inFront controls
             ]
 
 
