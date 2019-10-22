@@ -1,4 +1,4 @@
-module Demos.Main exposing (main)
+module Demos.Spreading exposing (main)
 
 import Color
 import Direction2d
@@ -31,10 +31,6 @@ type alias Action =
 init =
     [ { actor = ()
       , displacement = Vector2d.zero
-      , interactions = []
-      }
-    , { actor = ()
-      , displacement = Vector2d.meters -5 0
       , interactions = []
       }
     ]

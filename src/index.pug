@@ -8,11 +8,12 @@ html(lang='en')
       name="viewport" 
       content="width=device-width, initial-scale=1, shrink-to-fit=no"
     )
+    script(src="./index.ts" defer)
 
   body
     h1 Sweet demos
     ul
-      li: a.demo(href="demos/Binary.html") Binary Demo
-      li: a.demo(href="demos/Main.html") Multiplication Demo
+      li: a.demo(href="?demo=Binary") Binary Demo
+      li: a.demo(href="?demo=Spreading") Spreading and Breading Demo
 
 
