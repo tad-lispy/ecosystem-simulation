@@ -2,7 +2,7 @@ import * as ElmDebugger from 'elm-debug-transformer';
 ElmDebugger.register();
 
 enum Demo { 
-  Main = "Main",
+  Spreading = "Spreading",
   Binary = "Binary",
   Empty = "Empty"
 }
@@ -27,8 +27,8 @@ export default function load(demo: Demo) {
   switch(demo) {
     case Demo.Binary:
       return import("./Demos/Binary.elm").then(init(name))
-    case Demo.Main:
-      return import("./Demos/Main.elm").then(init(name))
+    case Demo.Spreading:
+      return import("./Demos/Spreading.elm").then(init(name))
     case Demo.Empty:
       return import("./Demos/Empty.elm").then(init(name))
     default:
