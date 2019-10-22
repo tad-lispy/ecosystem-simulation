@@ -6,8 +6,6 @@
 /public/
 /built/
 /dist/
-# Contains HTML generated from /src/Demos/*.elm
-/src/demos/ 
 .cache/
 /node_modules/
 .installed

@@ -1,8 +1,5 @@
 # This makefile is primarily responsible for building the website with description of the package and some demos.
 
-demos_sources = $(wildcard src/Demos/*.elm)
-demos_targets = $(patsubst src/Demos/%.elm, src/demos/%.html, ${demos_sources})
-
 .PHONY: all
 all: .installed clean-cache dist
 
@@ -19,22 +16,14 @@ install:
 
 # Run development server
 .PHONY: develop
-develop: .installed clean-cache demos
+develop: .installed clean-cache
 	# TODO: Pass the list of demos to html or js code somehow to allow dynamic switching of the demo.
 	npx parcel src/index.pug 
 
 # Build distribution files and place them where they are expected
 .PHONY: dist
-dist: .installed dist/index.html
-
-dist/index.html: .installed demos src/index.pug
+dist: .installed
 	npx parcel build --public-url . src/index.pug
-
-.PHONY: demos
-demos: .installed ${demos_targets} 
-
-src/demos/%.html: src/Demos/%.elm
-	npx elm make --output $@ $<
 
 .PHONY: serve
 serve: .installed dist
