@@ -195,10 +195,6 @@ update setup msg model =
                         |> min 32
                         |> Duration.milliseconds
 
-                actorUpades =
-                    model.actors
-                        |> IntDict.map updateActor
-
                 updateActor :
                     Id
                     -> actor
@@ -222,98 +218,10 @@ update setup msg model =
                                     (plane |> WrappedPlane.remove id)
                                     latency
                                 |> setup.updateActor id actor
-
-                applyActorUpdate :
-                    Id
-                    -> ActorUpdate actor action
-                    -> Model actor action
-                    -> Model actor action
-                applyActorUpdate id actorUpdate memo =
-                    let
-                        withActorUpdated =
-                            case actorUpdate.change of
-                                Unchanged ->
-                                    { memo
-                                        | actors =
-                                            memo.actors
-                                        , surface =
-                                            memo.surface
-                                                |> WrappedPlane.shiftTo id
-                                                |> Maybe.map
-                                                    (actorUpdate.velocity
-                                                        |> Vector2d.for latency
-                                                        |> WrappedPlane.shift
-                                                    )
-                                                |> Maybe.map (WrappedPlane.place id)
-                                                |> Maybe.withDefault memo.surface
-                                    }
-
-                                Changed actor ->
-                                    { memo
-                                        | actors =
-                                            memo.actors
-                                                |> IntDict.insert id actor
-                                        , surface =
-                                            memo.surface
-                                                |> WrappedPlane.shiftTo id
-                                                |> Maybe.map
-                                                    (actorUpdate.velocity
-                                                        |> Vector2d.for latency
-                                                        |> WrappedPlane.shift
-                                                    )
-                                                |> Maybe.map (WrappedPlane.place id)
-                                                |> Maybe.withDefault memo.surface
-                                    }
-
-                                Removed ->
-                                    { memo
-                                        | actors =
-                                            IntDict.remove id memo.actors
-                                        , surface =
-                                            WrappedPlane.remove id memo.surface
-                                    }
-                    in
-                    addSpawns actorUpdate.spawn withActorUpdated
-
-                addSpawns :
-                    List (Spawn actor action)
-                    -> Model actor action
-                    -> Model actor action
-                addSpawns spawns memo =
-                    spawns
-                        |> List.foldl
-                            addSpawn
-                            { memo | surface = WrappedPlane.placeAnchor memo.surface }
-                        |> resetAnchor
-
-                addSpawn :
-                    Spawn actor action
-                    -> Model actor action
-                    -> Model actor action
-                addSpawn spawn memo =
-                    { memo
-                        | actors = IntDict.insert memo.seed spawn.actor memo.actors
-                        , surface =
-                            memo.surface
-                                |> WrappedPlane.shift spawn.displacement
-                                |> WrappedPlane.place memo.seed
-                                |> WrappedPlane.return
-                        , seed = memo.seed + 1
-                    }
-
-                resetAnchor :
-                    Model actor action
-                    -> Model actor action
-                resetAnchor memo =
-                    { memo
-                        | surface =
-                            memo.surface
-                                |> WrappedPlane.return
-                                |> WrappedPlane.removeAnchor
-                    }
             in
-            ( actorUpades
-                |> IntDict.foldl applyActorUpdate model
+            ( model.actors
+                |> IntDict.map updateActor
+                |> IntDict.foldl (applyActorUpdate latency) { model | interactions = IntDict.empty }
                 |> resetAnchor
             , Cmd.none
             )
@@ -526,3 +434,105 @@ grid rows cols distance constructor =
                 , displacement = Vector2d.xy x y
                 }
             )
+
+
+applyActorUpdate :
+    Duration
+    -> Id
+    -> ActorUpdate actor action
+    -> Model actor action
+    -> Model actor action
+applyActorUpdate latency id actorUpdate model =
+    let
+        withActorUpdated =
+            case actorUpdate.change of
+                Unchanged ->
+                    { model
+                        | actors =
+                            model.actors
+                        , surface =
+                            model.surface
+                                |> WrappedPlane.shiftTo id
+                                |> Maybe.map
+                                    (actorUpdate.velocity
+                                        |> Vector2d.for latency
+                                        |> WrappedPlane.shift
+                                    )
+                                |> Maybe.map (WrappedPlane.place id)
+                                |> Maybe.withDefault model.surface
+                        , interactions =
+                            model.interactions
+                                |> Interaction.batch id actorUpdate.interactions
+                    }
+
+                Changed actor ->
+                    { model
+                        | actors =
+                            model.actors
+                                |> IntDict.insert id actor
+                        , surface =
+                            model.surface
+                                |> WrappedPlane.shiftTo id
+                                |> Maybe.map
+                                    (actorUpdate.velocity
+                                        |> Vector2d.for latency
+                                        |> WrappedPlane.shift
+                                    )
+                                |> Maybe.map (WrappedPlane.place id)
+                                |> Maybe.withDefault model.surface
+                        , interactions =
+                            model.interactions
+                                |> Interaction.batch id actorUpdate.interactions
+                    }
+
+                Removed ->
+                    { model
+                        | actors =
+                            IntDict.remove id model.actors
+                        , surface =
+                            WrappedPlane.remove id model.surface
+                        , interactions =
+                            model.interactions
+                                |> Interaction.batch id actorUpdate.interactions
+                    }
+    in
+    withActorUpdated
+        |> addSpawns actorUpdate.spawn
+
+
+addSpawns :
+    List (Spawn actor action)
+    -> Model actor action
+    -> Model actor action
+addSpawns spawns model =
+    spawns
+        |> List.foldl addSpawn { model | surface = WrappedPlane.placeAnchor model.surface }
+        |> resetAnchor
+
+
+addSpawn :
+    Spawn actor action
+    -> Model actor action
+    -> Model actor action
+addSpawn spawn model =
+    { model
+        | actors = IntDict.insert model.seed spawn.actor model.actors
+        , surface =
+            model.surface
+                |> WrappedPlane.shift spawn.displacement
+                |> WrappedPlane.place model.seed
+                |> WrappedPlane.return
+        , seed = model.seed + 1
+    }
+
+
+resetAnchor :
+    Model actor action
+    -> Model actor action
+resetAnchor model =
+    { model
+        | surface =
+            model.surface
+                |> WrappedPlane.return
+                |> WrappedPlane.removeAnchor
+    }

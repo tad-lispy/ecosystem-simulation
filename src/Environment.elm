@@ -28,7 +28,7 @@ type alias Snapshot actor action =
     { actors : IntDict actor
     , surface : Plane
     , latency : Duration
-    , interactions : List (Interaction action) -- IDEA: Shall I make interactions lazy too? That would require separating the type to own module.
+    , interactions : List (Interaction action)
     }
 
 
@@ -71,6 +71,8 @@ latency (Environment environment) =
     environment.latency
 
 
-interactions : Environment actor action -> List (Interaction action)
+interactions :
+    Environment actor action
+    -> List (Interaction action)
 interactions (Environment environment) =
     environment.interactions

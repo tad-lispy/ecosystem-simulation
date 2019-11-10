@@ -4,7 +4,8 @@ ElmDebugger.register();
 enum Demo { 
   Spreading = "Spreading",
   Binary = "Binary",
-  Empty = "Empty"
+  Empty = "Empty",
+  Zombies = "Zombies",
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -31,6 +32,8 @@ export default function load(demo: Demo) {
       return import("./Demos/Spreading.elm").then(init(name))
     case Demo.Empty:
       return import("./Demos/Empty.elm").then(init(name))
+    case Demo.Zombies:
+      return import("./Demos/Zombies.elm").then(init(name))
     default:
       throw new Error(`Unsupported demo value: ${ name }`)
   }
