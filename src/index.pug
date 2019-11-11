@@ -11,9 +11,40 @@ html(lang='en')
     script(src="./index.ts" defer)
 
   body
-    h1 Sweet demos
+    h1 Actor Based Ecosystems Simulation Software
+
+    p Let's you develop simulations of systems consisting of multiple independent actors that interact with each other using a #[a(href="https://elm-lang.org/") delightful functional programing language Elm].
+
+
+    h2 Sweet demos
+
     ul
-      li: a.demo(href="?demo=Binary") Binary Demo
-      li: a.demo(href="?demo=Spreading") Spreading and Breading Demo
-      li: a.demo(href="?demo=Zombies") Zombies 🧟‍♀️ 
+      li
+        h3: a.demo(href="?demo=Spreading") Spreading and Breading Demo
+
+        p The one created in the tutorial (#[a(href="https://gitlab.com/tad-lispy/ecosystem-simulation/#installation") see the README]).
+
+        p [#[a(href="https://gitlab.com/tad-lispy/ecosystem-simulation/blob/master/src/Demos/Spreading.elm") source code]]
+      
+      li
+        h3: a.demo(href="?demo=Binary") Binary Demo
+
+        p [#[a(href="https://gitlab.com/tad-lispy/ecosystem-simulation/blob/master/src/Demos/Binary.elm") source code]]
+
+        p A sily particle simulation. There are two variants of particles: #[code Uglon] and #[code Pretton]. Every particle is attracted to #[code Pretton]. Every particle is repulsed by #[code Uglon]. There is also a #[em strong force] that acts on short distnances and repulses all particles from each other (so they don't get too cosy).
+
+      li
+        h3: a.demo(href="?demo=Zombies") Zombies 🧟‍♀️ 
+
+        p [#[a(href="https://gitlab.com/tad-lispy/ecosystem-simulation/blob/master/src/Demos/Zombies.elm") source code]]
+
+        p Zombies epidemic! Again there are two variants of actors: #[code Living] and #[code Dead]. The dead chase the living - the living run for their lives. They also flock together to find safty in numbers - the fools! When a zombie bites the living - they turn into a zombie. Note that zombies move with the same speed as the living - neither can outrun the other. So if you stay far from danger, you should be safe... or should you? Do you think anyone will survive this? Watch and see for your self!
+
+
+    h2 Get started
+
+    p Please #[a(href="https://gitlab.com/tad-lispy/ecosystem-simulation/#installation") see the README] for instructions on how to get started.
+
+    p Coming soon to Elm packages repository.
+
 
