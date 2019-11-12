@@ -15,6 +15,7 @@ import Browser
 import Browser.Events
 import Cluster exposing (Coordinates)
 import Color exposing (Color)
+import Dict exposing (Dict)
 import Duration exposing (Duration, Seconds)
 import Element exposing (Element)
 import Element.Font as Font
@@ -35,6 +36,7 @@ import Speed exposing (MetersPerSecond, Speed)
 import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
+import Time
 import Transformation exposing (Transformation)
 import Vector2d exposing (Vector2d)
 import WrappedPlane exposing (Plane)
@@ -69,6 +71,7 @@ type alias Setup actor action =
     , init : List (Spawn actor action)
     , paintActor : actor -> Image
     , size : Length
+    , classify : actor -> String
     }
 
 
@@ -83,6 +86,7 @@ type alias Model actor action =
     , actors : IntDict actor
     , seed : Id
     , selected : Maybe Id
+    , stats : Dict String Float
     }
 
 
@@ -136,6 +140,7 @@ init setup _ =
             , seed = 0
             , paused = False
             , selected = Nothing
+            , stats = Dict.empty
             }
 
         initReducer :
@@ -160,14 +165,24 @@ init setup _ =
                         spawn.interactions
                 , seed = id + 1
             }
+
+        initStats : Model actor action -> Model actor action
+        initStats input =
+            { input
+                | stats =
+                    updateStats setup.classify input.actors
+            }
     in
-    ( List.indexedFoldl initReducer empty setup.init
+    ( setup.init
+        |> List.indexedFoldl initReducer empty
+        |> initStats
     , Cmd.none
     )
 
 
 type Msg
     = Animate Float
+    | ClockTick Time.Posix
     | Selected Id
     | Pause
     | Play
@@ -226,6 +241,14 @@ update setup msg model =
             , Cmd.none
             )
 
+        ClockTick _ ->
+            ( { model
+                | stats =
+                    updateStats setup.classify model.actors
+              }
+            , Cmd.none
+            )
+
         Selected id ->
             ( { model | selected = Just id }
             , Cmd.none
@@ -248,12 +271,46 @@ subscriptions model =
         Sub.none
 
     else
-        Browser.Events.onAnimationFrameDelta Animate
+        [ Browser.Events.onAnimationFrameDelta Animate
+        , Time.every 1000 ClockTick
+        ]
+            |> Sub.batch
 
 
 view : Setup actor action -> Model actor action -> Html Msg
 view setup model =
     let
+        scene : Element Msg
+        scene =
+            model
+                |> paintScene setup resolution
+                |> Svg.svg
+                    [ Html.Attributes.style "width" "100%"
+                    , Html.Attributes.style "height" "100%"
+                    , Svg.Attributes.viewBox viewbox
+                    , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
+                    , Html.Attributes.style "background" <|
+                        Color.toCssString <|
+                            Color.hsl 0.6 0.8 0.1
+                    , Svg.Events.onClick
+                        (if model.paused then
+                            Animate 16
+
+                         else
+                            Pause
+                        )
+                    ]
+                |> Element.html
+
+        stats : Element Msg
+        stats =
+            model.stats
+                |> Dict.map (\key value -> String.fromFloat value)
+                |> Dict.toList
+                |> List.map (\( key, value ) -> key ++ ": " ++ value)
+                |> List.map Element.text
+                |> Element.column []
+
         controls : Element Msg
         controls =
             if model.paused then
@@ -302,29 +359,12 @@ view setup model =
                 |> List.map String.fromFloat
                 |> String.join " "
     in
-    model
-        |> paintScene setup resolution
-        |> Svg.svg
-            [ Html.Attributes.style "width" "100%"
-            , Html.Attributes.style "height" "100%"
-            , Svg.Attributes.viewBox viewbox
-            , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
-            , Html.Attributes.style "background" <|
-                Color.toCssString <|
-                    Color.hsl 0.6 0.8 0.1
-            , Svg.Events.onClick
-                (if model.paused then
-                    Animate 16
-
-                 else
-                    Pause
-                )
-            ]
-        |> Element.html
+    scene
         |> Element.layout
             [ Element.width Element.fill
             , Element.height Element.fill
             , Element.inFront controls
+            , Element.below stats
             ]
 
 
@@ -536,3 +576,24 @@ resetAnchor model =
                 |> WrappedPlane.return
                 |> WrappedPlane.removeAnchor
     }
+
+
+updateStats :
+    (actor -> String)
+    -> IntDict actor
+    -> Dict String Float
+updateStats classify actors =
+    actors
+        |> IntDict.values
+        |> List.map classify
+        |> List.foldl
+            (\label memo ->
+                let
+                    value =
+                        memo
+                            |> Dict.get label
+                            |> Maybe.withDefault 0
+                in
+                memo |> Dict.insert label (value + 1)
+            )
+            Dict.empty

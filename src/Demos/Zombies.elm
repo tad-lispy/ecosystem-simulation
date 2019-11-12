@@ -20,6 +20,14 @@ main =
         , init = init
         , updateActor = updateActor
         , paintActor = paintActor
+        , classify =
+            \actor ->
+                case actor of
+                    Living ->
+                        "Living"
+
+                    Dead ->
+                        "Infected"
         }
 
 

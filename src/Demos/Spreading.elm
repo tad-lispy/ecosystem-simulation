@@ -17,6 +17,7 @@ main =
         , updateActor = updateActor
         , paintActor = paintActor
         , init = init
+        , classify = always "Actor"
         }
 
 

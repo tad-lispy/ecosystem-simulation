@@ -21,6 +21,14 @@ main =
         , init = init
         , updateActor = updateActor
         , paintActor = paintActor
+        , classify =
+            \actor ->
+                case actor of
+                    Uglon _ ->
+                        "Uglon"
+
+                    Pretton _ ->
+                        "Pretton"
         }
 
 
