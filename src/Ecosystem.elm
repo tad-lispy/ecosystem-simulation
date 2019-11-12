@@ -27,12 +27,26 @@ import IntDict exposing (IntDict)
 import Interaction exposing (Interaction)
 import Json.Decode
 import Length exposing (Length, Meters)
+import LineChart
+import LineChart.Area
+import LineChart.Axis
+import LineChart.Axis.Intersection
+import LineChart.Colors
+import LineChart.Container
+import LineChart.Dots
+import LineChart.Events
+import LineChart.Grid
+import LineChart.Interpolation
+import LineChart.Junk
+import LineChart.Legends
+import LineChart.Line
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Pixels exposing (Pixels)
 import Point2d exposing (Point2d)
 import Quantity exposing (Quantity, Rate, zero)
 import Speed exposing (MetersPerSecond, Speed)
+import Stats exposing (DataPoint, DataPoints, Stats)
 import Svg exposing (Svg)
 import Svg.Attributes
 import Svg.Events
@@ -86,7 +100,9 @@ type alias Model actor action =
     , actors : IntDict actor
     , seed : Id
     , selected : Maybe Id
-    , stats : Dict String Float
+    , clock : Float
+    , stats : Stats
+    , dataPoints : DataPoints
     }
 
 
@@ -132,6 +148,32 @@ init :
     -> ( Model actor action, Cmd Msg )
 init setup _ =
     let
+        model =
+            List.indexedFoldl initReducer empty setup.init
+
+        initReducer :
+            Int
+            -> Spawn actor action
+            -> Model actor action
+            -> Model actor action
+        initReducer id spawn memo =
+            { memo
+                | surface =
+                    memo.surface
+                        |> WrappedPlane.shift spawn.displacement
+                        |> WrappedPlane.place id
+                        |> WrappedPlane.return
+                , actors =
+                    memo.actors
+                        |> IntDict.insert id spawn.actor
+                , interactions =
+                    List.foldl
+                        (Interaction.register id)
+                        memo.interactions
+                        spawn.interactions
+                , seed = id + 1
+            }
+
         empty : Model actor action
         empty =
             { surface = WrappedPlane.empty setup.size
@@ -140,42 +182,18 @@ init setup _ =
             , seed = 0
             , paused = False
             , selected = Nothing
+            , clock = 0
             , stats = Dict.empty
+            , dataPoints = Stats.empty
             }
 
-        initReducer :
-            Int
-            -> Spawn actor action
-            -> Model actor action
-            -> Model actor action
-        initReducer id spawn model =
-            { model
-                | surface =
-                    model.surface
-                        |> WrappedPlane.shift spawn.displacement
-                        |> WrappedPlane.place id
-                        |> WrappedPlane.return
-                , actors =
-                    model.actors
-                        |> IntDict.insert id spawn.actor
-                , interactions =
-                    List.foldl
-                        (Interaction.register id)
-                        model.interactions
-                        spawn.interactions
-                , seed = id + 1
-            }
+        stats =
+            gatherStats setup.classify model.actors
 
-        initStats : Model actor action -> Model actor action
-        initStats input =
-            { input
-                | stats =
-                    updateStats setup.classify input.actors
-            }
+        dataPoints =
+            Stats.appendDataPoints 0 stats Stats.empty
     in
-    ( setup.init
-        |> List.indexedFoldl initReducer empty
-        |> initStats
+    ( { model | stats = stats, dataPoints = dataPoints }
     , Cmd.none
     )
 
@@ -242,9 +260,20 @@ update setup msg model =
             )
 
         ClockTick _ ->
+            let
+                clock =
+                    model.clock + 1000
+
+                stats =
+                    gatherStats setup.classify model.actors
+
+                dataPoints =
+                    Stats.appendDataPoints clock stats model.dataPoints
+            in
             ( { model
-                | stats =
-                    updateStats setup.classify model.actors
+                | clock = clock
+                , stats = stats
+                , dataPoints = dataPoints
               }
             , Cmd.none
             )
@@ -304,12 +333,15 @@ view setup model =
 
         stats : Element Msg
         stats =
-            model.stats
+            [ statsUi model
+            , model.stats
                 |> Dict.map (\key value -> String.fromFloat value)
                 |> Dict.toList
                 |> List.map (\( key, value ) -> key ++ ": " ++ value)
                 |> List.map Element.text
                 |> Element.column []
+            ]
+                |> Element.column [ Element.width Element.fill ]
 
         controls : Element Msg
         controls =
@@ -365,6 +397,68 @@ view setup model =
             , Element.height Element.fill
             , Element.inFront controls
             , Element.below stats
+            ]
+
+
+statsUi : Model actor action -> Element Msg
+statsUi model =
+    let
+        dataPoints =
+            Stats.appendDataPoints model.clock model.stats model.dataPoints
+
+        chartConfig : LineChart.Config DataPoint Msg
+        chartConfig =
+            { y =
+                LineChart.Axis.default 400
+                    "Population"
+                    .quantity
+            , x =
+                LineChart.Axis.default 700
+                    "Time"
+                    (.time >> (\t -> t / 60000))
+            , container =
+                LineChart.Container.custom
+                    { attributesHtml =
+                        [ Html.Attributes.style "font-family" "monospace"
+                        ]
+                    , attributesSvg =
+                        [ Html.Attributes.style "font-size" "12px"
+                        ]
+                    , size = LineChart.Container.relative
+                    , margin = LineChart.Container.Margin 30 100 60 80
+                    , id = "population-chart"
+                    }
+            , interpolation = LineChart.Interpolation.monotone
+            , intersection = LineChart.Axis.Intersection.default
+            , legends =
+                LineChart.Legends.byBeginning
+                    (LineChart.Junk.label LineChart.Colors.gray)
+            , events = LineChart.Events.default
+            , junk = LineChart.Junk.default
+            , grid = LineChart.Grid.default
+            , area = LineChart.Area.default
+            , line = LineChart.Line.default
+            , dots = LineChart.Dots.default
+            }
+
+        lines =
+            model.dataPoints
+                |> Dict.toList
+                |> List.map
+                    (\( label, points ) ->
+                        LineChart.line
+                            LineChart.Colors.green
+                            LineChart.Dots.none
+                            label
+                            points
+                    )
+    in
+    lines
+        |> LineChart.viewCustom chartConfig
+        |> Element.html
+        |> Element.el
+            [ Element.width Element.fill
+            , Element.height Element.fill
             ]
 
 
@@ -578,11 +672,11 @@ resetAnchor model =
     }
 
 
-updateStats :
+gatherStats :
     (actor -> String)
     -> IntDict actor
-    -> Dict String Float
-updateStats classify actors =
+    -> Stats
+gatherStats classify actors =
     actors
         |> IntDict.values
         |> List.map classify

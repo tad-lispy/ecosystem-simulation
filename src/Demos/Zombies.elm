@@ -50,7 +50,7 @@ init =
             else
                 Dead
     in
-    Ecosystem.grid 6 6 (meters 10) constructor
+    Ecosystem.grid 8 12 (meters 15) constructor
 
 
 updateActor :
