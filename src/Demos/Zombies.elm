@@ -1,11 +1,13 @@
 module Demos.Zombies exposing (main)
 
 import Color exposing (Color)
+import Dict
 import Ecosystem exposing (Change(..))
 import Environment exposing (Environment)
 import Force exposing (Newtons, newtons)
 import Interaction exposing (Interaction)
 import Length exposing (meters)
+import List.Extra as List
 import Maybe.Extra as Maybe
 import Quantity exposing (Quantity, zero)
 import Set exposing (Set)
@@ -20,14 +22,7 @@ main =
         , init = init
         , updateActor = updateActor
         , paintActor = paintActor
-        , classify =
-            \actor ->
-                case actor of
-                    Living ->
-                        "Living"
-
-                    Dead ->
-                        "Infected"
+        , gatherStats = gatherStats
         }
 
 
@@ -214,3 +209,27 @@ groupInfluence this environment group =
         |> Vector2d.direction
         |> Maybe.map (Vector2d.withLength force)
         |> Maybe.withDefault Vector2d.zero
+
+
+gatherStats actors =
+    let
+        countGroups =
+            Tuple.mapSecond
+                (List.length
+                    >> (+) 1
+                    >> toFloat
+                )
+
+        classify actor =
+            case actor of
+                Living ->
+                    "Living"
+
+                Dead ->
+                    "Infected"
+    in
+    actors
+        |> List.map classify
+        |> List.gatherEquals
+        |> List.map countGroups
+        |> Dict.fromList

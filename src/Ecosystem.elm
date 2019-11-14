@@ -85,7 +85,7 @@ type alias Setup actor action =
     , init : List (Spawn actor action)
     , paintActor : actor -> Image
     , size : Length
-    , classify : actor -> String
+    , gatherStats : List actor -> Stats
     }
 
 
@@ -188,7 +188,9 @@ init setup _ =
             }
 
         stats =
-            gatherStats setup.classify model.actors
+            model.actors
+                |> IntDict.values
+                |> setup.gatherStats
 
         dataPoints =
             Stats.appendDataPoints 0 stats Stats.empty
@@ -265,7 +267,9 @@ update setup msg model =
                     model.clock + 1000
 
                 stats =
-                    gatherStats setup.classify model.actors
+                    model.actors
+                        |> IntDict.values
+                        |> setup.gatherStats
 
                 dataPoints =
                     Stats.appendDataPoints clock stats model.dataPoints
@@ -410,7 +414,7 @@ statsUi model =
         chartConfig =
             { y =
                 LineChart.Axis.default 400
-                    "Population"
+                    "Quantity"
                     .quantity
             , x =
                 LineChart.Axis.default 700
@@ -671,23 +675,3 @@ resetAnchor model =
                 |> WrappedPlane.removeAnchor
     }
 
-
-gatherStats :
-    (actor -> String)
-    -> IntDict actor
-    -> Stats
-gatherStats classify actors =
-    actors
-        |> IntDict.values
-        |> List.map classify
-        |> List.foldl
-            (\label memo ->
-                let
-                    value =
-                        memo
-                            |> Dict.get label
-                            |> Maybe.withDefault 0
-                in
-                memo |> Dict.insert label (value + 1)
-            )
-            Dict.empty
