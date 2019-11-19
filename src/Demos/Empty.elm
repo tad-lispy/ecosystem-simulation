@@ -1,6 +1,7 @@
 module Demos.Empty exposing (main)
 
 import Color exposing (Color)
+import Dict
 import Ecosystem exposing (ActorUpdate, Change(..), Id, Spawn)
 import Environment exposing (Environment)
 import Interaction exposing (Interaction)
@@ -15,6 +16,7 @@ main =
         , updateActor = updateActor
         , paintActor = paintActor
         , init = init
+        , gatherStats = always (Dict.singleton "Void" 0)
         }
 
 

@@ -1,6 +1,7 @@
 module Demos.Spreading exposing (main)
 
 import Color
+import Dict
 import Direction2d
 import Ecosystem exposing (Change(..))
 import Environment
@@ -17,6 +18,7 @@ main =
         , updateActor = updateActor
         , paintActor = paintActor
         , init = init
+        , gatherStats = List.length >> toFloat >> Dict.singleton "Actors"
         }
 
 

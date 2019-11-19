@@ -2,6 +2,7 @@ module Demos.Binary exposing (main)
 
 import Acceleration exposing (Acceleration, MetersPerSecondSquared)
 import Color exposing (Color)
+import Dict
 import Ecosystem exposing (Change(..))
 import Environment exposing (Environment)
 import Force exposing (Newtons, newtons)
@@ -10,7 +11,7 @@ import Mass exposing (kilograms)
 import Maybe.Extra as Maybe
 import Quantity exposing (Quantity, zero)
 import Set exposing (Set)
-import Speed exposing (MetersPerSecond)
+import Speed exposing (MetersPerSecond, Speed)
 import Vector2d exposing (Vector2d)
 
 
@@ -21,6 +22,7 @@ main =
         , init = init
         , updateActor = updateActor
         , paintActor = paintActor
+        , gatherStats = gatherStats
         }
 
 
@@ -209,3 +211,23 @@ groupInfluence environment group =
         |> Vector2d.direction
         |> Maybe.map (Vector2d.withLength force)
         |> Maybe.withDefault Vector2d.zero
+
+
+gatherStats actors =
+    let
+        getVelocity : Actor -> Velocity
+        getVelocity actor =
+            case actor of
+                Uglon velocity ->
+                    velocity
+
+                Pretton velocity ->
+                    velocity
+    in
+    actors
+        |> List.map getVelocity
+        |> List.map Vector2d.length
+        |> List.foldl Quantity.plus Quantity.zero
+        |> Quantity.divideBy (List.length actors |> toFloat)
+        |> Speed.inMetersPerSecond
+        |> Dict.singleton "Average speed"
