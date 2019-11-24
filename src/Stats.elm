@@ -3,10 +3,14 @@ module Stats exposing
     , DataPoints
     , Stats
     , appendDataPoints
+    , dropOlderThan
     , empty
     )
 
 import Dict exposing (Dict)
+import Duration exposing (Duration)
+import List.Extra as List
+import Quantity
 
 
 type alias DataPoints =
@@ -14,7 +18,7 @@ type alias DataPoints =
 
 
 type alias DataPoint =
-    { time : Float
+    { time : Duration
     , quantity : Float
     }
 
@@ -28,7 +32,7 @@ empty =
     Dict.empty
 
 
-appendDataPoints : Float -> Stats -> DataPoints -> DataPoints
+appendDataPoints : Duration -> Stats -> DataPoints -> DataPoints
 appendDataPoints time stats dataPoints =
     stats
         |> Dict.foldl
@@ -43,3 +47,14 @@ appendDataPoints time stats dataPoints =
                     memo
             )
             dataPoints
+
+
+dropOlderThan : Duration -> DataPoints -> DataPoints
+dropOlderThan threshold data =
+    data
+        |> Dict.map
+            (\_ points ->
+                List.takeWhile
+                    (.time >> Quantity.greaterThan threshold)
+                    points
+            )

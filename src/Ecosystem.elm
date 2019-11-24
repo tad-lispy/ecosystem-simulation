@@ -16,7 +16,7 @@ import Browser.Events
 import Cluster exposing (Coordinates)
 import Color exposing (Color)
 import Dict exposing (Dict)
-import Duration exposing (Duration, Seconds)
+import Duration exposing (Duration, Seconds, seconds)
 import Element exposing (Element)
 import Element.Font as Font
 import Element.Input as Input
@@ -86,6 +86,7 @@ type alias Setup actor action =
     , paintActor : actor -> Image
     , size : Length
     , gatherStats : List actor -> Stats
+    , statsRetention : Duration
     }
 
 
@@ -100,7 +101,7 @@ type alias Model actor action =
     , actors : IntDict actor
     , seed : Id
     , selected : Maybe Id
-    , clock : Float
+    , clock : Duration
     , stats : Stats
     , dataPoints : DataPoints
     }
@@ -182,7 +183,7 @@ init setup _ =
             , seed = 0
             , paused = False
             , selected = Nothing
-            , clock = 0
+            , clock = zero
             , stats = Dict.empty
             , dataPoints = Stats.empty
             }
@@ -193,7 +194,7 @@ init setup _ =
                 |> setup.gatherStats
 
         dataPoints =
-            Stats.appendDataPoints 0 stats Stats.empty
+            Stats.appendDataPoints zero stats Stats.empty
     in
     ( { model | stats = stats, dataPoints = dataPoints }
     , Cmd.none
@@ -264,7 +265,7 @@ update setup msg model =
         ClockTick _ ->
             let
                 clock =
-                    model.clock + 1000
+                    Quantity.plus (seconds 1) model.clock
 
                 stats =
                     model.actors
@@ -272,7 +273,9 @@ update setup msg model =
                         |> setup.gatherStats
 
                 dataPoints =
-                    Stats.appendDataPoints clock stats model.dataPoints
+                    model.dataPoints
+                        |> Stats.appendDataPoints clock stats
+                        |> Stats.dropOlderThan (Quantity.minus setup.statsRetention clock)
             in
             ( { model
                 | clock = clock
@@ -419,7 +422,7 @@ statsUi model =
             , x =
                 LineChart.Axis.default 700
                     "Time"
-                    (.time >> (\t -> t / 60000))
+                    (.time >> Duration.inMinutes)
             , container =
                 LineChart.Container.custom
                     { attributesHtml =
@@ -674,4 +677,3 @@ resetAnchor model =
                 |> WrappedPlane.return
                 |> WrappedPlane.removeAnchor
     }
-

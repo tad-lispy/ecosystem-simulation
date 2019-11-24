@@ -6,6 +6,7 @@ import Ecosystem exposing (ActorUpdate, Change(..), Id, Spawn)
 import Environment exposing (Environment)
 import Interaction exposing (Interaction)
 import Length exposing (Length, meters)
+import Quantity exposing (zero)
 import Speed exposing (metersPerSecond)
 import Vector2d exposing (Vector2d)
 
@@ -17,6 +18,7 @@ main =
         , paintActor = paintActor
         , init = init
         , gatherStats = always (Dict.singleton "Void" 0)
+        , statsRetention = zero
         }
 
 
