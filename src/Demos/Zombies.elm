@@ -2,6 +2,7 @@ module Demos.Zombies exposing (main)
 
 import Color exposing (Color)
 import Dict
+import Duration exposing (minutes)
 import Ecosystem exposing (Change(..))
 import Environment exposing (Environment)
 import Force exposing (Newtons, newtons)
@@ -23,6 +24,7 @@ main =
         , updateActor = updateActor
         , paintActor = paintActor
         , gatherStats = gatherStats
+        , statsRetention = minutes 15
         }
 
 

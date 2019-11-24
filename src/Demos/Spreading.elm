@@ -3,6 +3,7 @@ module Demos.Spreading exposing (main)
 import Color
 import Dict
 import Direction2d
+import Duration exposing (minutes)
 import Ecosystem exposing (Change(..))
 import Environment
 import Length exposing (meters)
@@ -19,6 +20,7 @@ main =
         , paintActor = paintActor
         , init = init
         , gatherStats = List.length >> toFloat >> Dict.singleton "Actors"
+        , statsRetention = minutes 15
         }
 
 
