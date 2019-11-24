@@ -15,8 +15,9 @@ import Browser
 import Browser.Events
 import Cluster exposing (Coordinates)
 import Color exposing (Color)
-import Dict exposing (Dict)
-import Duration exposing (Duration, Seconds, seconds)
+import Dict
+import Direction2d exposing (Direction2d)
+import Duration exposing (Duration, seconds)
 import Element exposing (Element)
 import Element.Font as Font
 import Element.Input as Input
@@ -26,7 +27,7 @@ import Html.Attributes
 import IntDict exposing (IntDict)
 import Interaction exposing (Interaction)
 import Json.Decode
-import Length exposing (Length, Meters)
+import Length exposing (Length, Meters, meters)
 import LineChart
 import LineChart.Area
 import LineChart.Axis
@@ -42,7 +43,7 @@ import LineChart.Legends
 import LineChart.Line
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Pixels exposing (Pixels)
+import Pixels exposing (Pixels, pixels)
 import Point2d exposing (Point2d)
 import Quantity exposing (Quantity, Rate, zero)
 import Speed exposing (MetersPerSecond, Speed)
@@ -104,6 +105,7 @@ type alias Model actor action =
     , clock : Duration
     , stats : Stats
     , dataPoints : DataPoints
+    , zoom : Float
     }
 
 
@@ -163,7 +165,7 @@ init setup _ =
                     memo.surface
                         |> WrappedPlane.shift spawn.displacement
                         |> WrappedPlane.place id
-                        |> WrappedPlane.return
+                        |> WrappedPlane.returnTo "origin"
                 , actors =
                     memo.actors
                         |> IntDict.insert id spawn.actor
@@ -186,6 +188,7 @@ init setup _ =
             , clock = zero
             , stats = Dict.empty
             , dataPoints = Stats.empty
+            , zoom = 1
             }
 
         stats =
@@ -207,6 +210,8 @@ type Msg
     | Selected Id
     | Pause
     | Play
+    | Pan (Direction2d Coordinates)
+    | Zoom Float
 
 
 update :
@@ -258,7 +263,7 @@ update setup msg model =
             ( model.actors
                 |> IntDict.map updateActor
                 |> IntDict.foldl (applyActorUpdate latency) { model | interactions = IntDict.empty }
-                |> resetAnchor
+                |> resetAnchor "parent"
             , Cmd.none
             )
 
@@ -300,17 +305,111 @@ update setup msg model =
             , Cmd.none
             )
 
+        Pan direction ->
+            let
+                length =
+                    10 / model.zoom |> meters
+
+                displacement =
+                    Vector2d.withLength length direction
+            in
+            ( { model
+                | surface =
+                    model.surface
+                        |> WrappedPlane.returnTo "origin"
+                        |> WrappedPlane.shift displacement
+                        |> WrappedPlane.placeAnchor "origin"
+              }
+            , Cmd.none
+            )
+
+        Zoom delta ->
+            ( { model
+                | zoom =
+                    model.zoom
+                        + delta
+                        |> min 10
+                        |> max 1
+              }
+            , Cmd.none
+            )
+
 
 subscriptions : Model actor action -> Sub Msg
 subscriptions model =
+    let
+        keyboardSubscription : Sub Msg
+        keyboardSubscription =
+            Browser.Events.onKeyPress keyPressDecoder
+
+        keyPressDecoder : Json.Decode.Decoder Msg
+        keyPressDecoder =
+            Json.Decode.field "key" Json.Decode.string
+                |> Json.Decode.andThen
+                    (\key ->
+                        case key of
+                            " " ->
+                                if model.paused then
+                                    Json.Decode.succeed Play
+
+                                else
+                                    Json.Decode.succeed Pause
+
+                            "=" ->
+                                Json.Decode.succeed (Zoom 0.1)
+
+                            "-" ->
+                                Json.Decode.succeed (Zoom -0.1)
+
+                            "a" ->
+                                Direction2d.x
+                                    |> Direction2d.reverse
+                                    |> Pan
+                                    |> Json.Decode.succeed
+
+                            "s" ->
+                                Direction2d.y
+                                    |> Pan
+                                    |> Json.Decode.succeed
+
+                            "w" ->
+                                Direction2d.y
+                                    |> Direction2d.reverse
+                                    |> Pan
+                                    |> Json.Decode.succeed
+
+                            "d" ->
+                                Direction2d.x
+                                    |> Pan
+                                    |> Json.Decode.succeed
+
+                            "p" ->
+                                Json.Decode.succeed <|
+                                    if model.paused then
+                                        Animate 32
+
+                                    else
+                                        Pause
+
+                            _ ->
+                                Json.Decode.fail "Unrecognized key was pressed"
+                    )
+    in
     if model.paused then
-        Sub.none
+        keyboardSubscription
 
     else
         [ Browser.Events.onAnimationFrameDelta Animate
         , Time.every 1000 ClockTick
+        , keyboardSubscription
         ]
             |> Sub.batch
+
+
+resolution =
+    Quantity.per
+        (meters 1)
+        (pixels 100)
 
 
 view : Setup actor action -> Model actor action -> Html Msg
@@ -319,7 +418,7 @@ view setup model =
         scene : Element Msg
         scene =
             model
-                |> paintScene setup resolution
+                |> paintScene setup
                 |> Svg.svg
                     [ Html.Attributes.style "width" "100%"
                     , Html.Attributes.style "height" "100%"
@@ -379,21 +478,17 @@ view setup model =
             else
                 Element.none
 
-        resolution =
-            Quantity.per
-                (Length.meters 1)
-                (Pixels.pixels 100)
-
-        viewport =
+        viewboxSize =
             setup.size
                 |> Quantity.at resolution
+                |> Quantity.divideBy model.zoom
                 |> Pixels.inPixels
 
         viewbox =
-            [ viewport / -2
-            , viewport / -2
-            , viewport
-            , viewport
+            [ viewboxSize / -2
+            , viewboxSize / -2
+            , viewboxSize
+            , viewboxSize
             ]
                 |> List.map String.fromFloat
                 |> String.join " "
@@ -471,29 +566,27 @@ statsUi model =
 
 paintScene :
     Setup actor action
-    -> Resolution
     -> Model actor action
     -> List (Svg Msg)
-paintScene setup resolution model =
+paintScene setup model =
     model.surface
-        |> WrappedPlane.render 500 500
+        |> WrappedPlane.render setup.size setup.size
         |> List.map
             (\( id, position ) ->
                 model.actors
                     |> IntDict.get id
-                    |> Maybe.map (paintActor setup resolution id position)
+                    |> Maybe.map (paintActor setup id position)
             )
         |> Maybe.values
 
 
 paintActor :
     Setup actor action
-    -> Resolution
     -> Id
     -> Vector2d Meters Coordinates
     -> actor
     -> Svg Msg
-paintActor setup resolution id position actor =
+paintActor setup id position actor =
     let
         image =
             setup.paintActor actor
@@ -647,8 +740,11 @@ addSpawns :
     -> Model actor action
 addSpawns spawns model =
     spawns
-        |> List.foldl addSpawn { model | surface = WrappedPlane.placeAnchor model.surface }
-        |> resetAnchor
+        |> List.foldl addSpawn
+            { model
+                | surface = WrappedPlane.placeAnchor "parent" model.surface
+            }
+        |> resetAnchor "parent"
 
 
 addSpawn :
@@ -662,18 +758,19 @@ addSpawn spawn model =
             model.surface
                 |> WrappedPlane.shift spawn.displacement
                 |> WrappedPlane.place model.seed
-                |> WrappedPlane.return
+                |> WrappedPlane.returnTo "parent"
         , seed = model.seed + 1
     }
 
 
 resetAnchor :
-    Model actor action
+    String
     -> Model actor action
-resetAnchor model =
+    -> Model actor action
+resetAnchor name model =
     { model
         | surface =
             model.surface
-                |> WrappedPlane.return
-                |> WrappedPlane.removeAnchor
+                |> WrappedPlane.returnTo "origin"
+                |> WrappedPlane.removeAnchor name
     }

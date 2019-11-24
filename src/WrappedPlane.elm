@@ -12,7 +12,7 @@ module WrappedPlane exposing
     , remove
     , removeAnchor
     , render
-    , return
+    , returnTo
     , shift
     , shiftTo
     , toList
@@ -20,6 +20,7 @@ module WrappedPlane exposing
 
 import Basics.Extra exposing (fractionalModBy)
 import Cluster exposing (Cluster(..), Coordinates(..))
+import Dict exposing (Dict)
 import IntDict exposing (IntDict)
 import Length exposing (Length, Meters)
 import Maybe.Extra as Maybe
@@ -34,7 +35,7 @@ type Plane
         { cluster : Cluster
         , size : Length
         , cursor : Point2d Meters Coordinates
-        , anchors : List (Point2d Meters Coordinates)
+        , anchors : Dict String (Point2d Meters Coordinates)
         }
 
 
@@ -53,28 +54,28 @@ empty size =
     Plane
         { cluster = Empty size
         , cursor = Point2d.origin
-        , anchors = []
+        , anchors = Dict.empty
         , size = size
         }
 
 
-placeAnchor : Plane -> Plane
-placeAnchor (Plane this) =
-    Plane { this | anchors = this.cursor :: this.anchors }
+placeAnchor : String -> Plane -> Plane
+placeAnchor name (Plane this) =
+    Plane { this | anchors = Dict.insert name this.cursor this.anchors }
 
 
-removeAnchor : Plane -> Plane
-removeAnchor (Plane this) =
-    Plane { this | anchors = List.drop 1 this.anchors }
+removeAnchor : String -> Plane -> Plane
+removeAnchor name (Plane this) =
+    Plane { this | anchors = Dict.remove name this.anchors }
 
 
-return : Plane -> Plane
-return (Plane this) =
+returnTo : String -> Plane -> Plane
+returnTo name (Plane this) =
     Plane
         { this
             | cursor =
                 this.anchors
-                    |> List.head
+                    |> Dict.get name
                     |> Maybe.withDefault Point2d.origin
         }
 
@@ -129,8 +130,8 @@ foldl reducer initial (Plane this) =
 
 
 render :
-    Float
-    -> Float
+    Length
+    -> Length
     -> Plane
     -> List ( Id, Vector2d Meters Coordinates )
 render width height (Plane this) =
