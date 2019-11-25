@@ -44,9 +44,8 @@ import LineChart.Line
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Pixels exposing (Pixels, pixels)
-import Point2d exposing (Point2d)
 import Quantity exposing (Quantity, Rate, zero)
-import Speed exposing (MetersPerSecond, Speed)
+import Speed exposing (MetersPerSecond)
 import Stats exposing (DataPoint, DataPoints, Stats)
 import Svg exposing (Svg)
 import Svg.Attributes
@@ -259,19 +258,23 @@ update setup msg model =
                                     (plane |> WrappedPlane.remove id)
                                     latency
                                 |> setup.updateActor id actor
+
+                clock =
+                    Quantity.plus latency model.clock
             in
             ( model.actors
                 |> IntDict.map updateActor
-                |> IntDict.foldl (applyActorUpdate latency) { model | interactions = IntDict.empty }
+                |> IntDict.foldl (applyActorUpdate latency)
+                    { model
+                        | interactions = IntDict.empty
+                        , clock = clock
+                    }
                 |> resetAnchor "parent"
             , Cmd.none
             )
 
         ClockTick _ ->
             let
-                clock =
-                    Quantity.plus (seconds 1) model.clock
-
                 stats =
                     model.actors
                         |> IntDict.values
@@ -279,12 +282,11 @@ update setup msg model =
 
                 dataPoints =
                     model.dataPoints
-                        |> Stats.appendDataPoints clock stats
-                        |> Stats.dropOlderThan (Quantity.minus setup.statsRetention clock)
+                        |> Stats.appendDataPoints model.clock stats
+                        |> Stats.dropOlderThan (Quantity.minus setup.statsRetention model.clock)
             in
             ( { model
-                | clock = clock
-                , stats = stats
+                | stats = stats
                 , dataPoints = dataPoints
               }
             , Cmd.none
@@ -406,6 +408,7 @@ subscriptions model =
             |> Sub.batch
 
 
+resolution : Resolution
 resolution =
     Quantity.per
         (meters 1)
@@ -440,8 +443,9 @@ view setup model =
         stats : Element Msg
         stats =
             [ statsUi model
+            , timerUi model.clock
             , model.stats
-                |> Dict.map (\key value -> String.fromFloat value)
+                |> Dict.map (\_ value -> String.fromFloat value)
                 |> Dict.toList
                 |> List.map (\( key, value ) -> key ++ ": " ++ value)
                 |> List.map Element.text
@@ -502,6 +506,40 @@ view setup model =
             ]
 
 
+timerUi : Duration -> Element Msg
+timerUi duration =
+    [ "Time: "
+    , duration
+        |> Duration.inHours
+        |> floor
+        |> String.fromInt
+        |> String.padLeft 2 '0'
+    , ":"
+    , duration
+        |> Duration.inMinutes
+        |> floor
+        |> remainderBy 60
+        |> String.fromInt
+        |> String.padLeft 2 '0'
+    , ":"
+    , duration
+        |> Duration.inSeconds
+        |> floor
+        |> remainderBy 60
+        |> String.fromInt
+        |> String.padLeft 2 '0'
+    , "."
+    , duration
+        |> Duration.inMilliseconds
+        |> floor
+        |> remainderBy 1000
+        |> String.fromInt
+        |> String.padLeft 3 '0'
+    ]
+        |> String.join ""
+        |> Element.text
+
+
 statsUi : Model actor action -> Element Msg
 statsUi model =
     let
@@ -544,7 +582,7 @@ statsUi model =
             }
 
         lines =
-            model.dataPoints
+            dataPoints
                 |> Dict.toList
                 |> List.map
                     (\( label, points ) ->
@@ -588,17 +626,21 @@ paintActor :
     -> Svg Msg
 paintActor setup id position actor =
     let
+        image : Image
         image =
             setup.paintActor actor
 
+        size : Float
         size =
             image.size
                 |> Quantity.at resolution
                 |> Pixels.inPixels
 
+        strokeWidth : Float
         strokeWidth =
             size / 5
 
+        translation : Transformation Coordinates
         translation =
             position
                 |> Vector2d.at resolution
