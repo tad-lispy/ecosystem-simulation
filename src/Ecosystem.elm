@@ -206,7 +206,8 @@ init setup _ =
 type Msg
     = Animate Float
     | ClockTick Time.Posix
-    | Selected Id
+    | ActorClicked Id
+    | VoidClicked
     | Pause
     | Play
     | Pan (Direction2d Coordinates)
@@ -270,6 +271,7 @@ update setup msg model =
                         , clock = clock
                     }
                 |> resetAnchor "parent"
+                |> track
             , Cmd.none
             )
 
@@ -292,8 +294,13 @@ update setup msg model =
             , Cmd.none
             )
 
-        Selected id ->
-            ( { model | selected = Just id }
+        ActorClicked id ->
+            ( track { model | selected = Just id }
+            , Cmd.none
+            )
+
+        VoidClicked ->
+            ( { model | selected = Nothing }
             , Cmd.none
             )
 
@@ -321,6 +328,7 @@ update setup msg model =
                         |> WrappedPlane.returnTo "origin"
                         |> WrappedPlane.shift displacement
                         |> WrappedPlane.placeAnchor "origin"
+                , selected = Nothing
               }
             , Cmd.none
             )
@@ -350,7 +358,7 @@ subscriptions model =
                 |> Json.Decode.andThen
                     (\key ->
                         case key of
-                            " " ->
+                            "p" ->
                                 if model.paused then
                                     Json.Decode.succeed Play
 
@@ -385,7 +393,7 @@ subscriptions model =
                                     |> Pan
                                     |> Json.Decode.succeed
 
-                            "p" ->
+                            "P" ->
                                 Json.Decode.succeed <|
                                     if model.paused then
                                         Animate 32
@@ -430,13 +438,7 @@ view setup model =
                     , Html.Attributes.style "background" <|
                         Color.toCssString <|
                             Color.hsl 0.6 0.8 0.1
-                    , Svg.Events.onClick
-                        (if model.paused then
-                            Animate 16
-
-                         else
-                            Pause
-                        )
+                    , Svg.Events.onClick VoidClicked
                     ]
                 |> Element.html
 
@@ -662,9 +664,10 @@ paintActor setup id position actor =
         , translation
             |> Transformation.toString
             |> Svg.Attributes.transform
+        , Html.Attributes.style "cursor" "pointer"
         , Svg.Events.stopPropagationOn "click"
             (Json.Decode.succeed
-                ( Selected id
+                ( ActorClicked id
                 , True
                 )
             )
@@ -816,3 +819,19 @@ resetAnchor name model =
                 |> WrappedPlane.returnTo "origin"
                 |> WrappedPlane.removeAnchor name
     }
+
+
+track : Model actor action -> Model actor action
+track model =
+    case model.selected of
+        Nothing ->
+            model
+
+        Just id ->
+            { model
+                | surface =
+                    model.surface
+                        |> WrappedPlane.shiftTo id
+                        |> Maybe.map (WrappedPlane.placeAnchor "origin")
+                        |> Maybe.withDefault model.surface
+            }
