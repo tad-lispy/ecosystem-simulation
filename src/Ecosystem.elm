@@ -84,6 +84,7 @@ type alias Setup actor action =
         -> ActorUpdate actor action
     , init : List (Spawn actor action)
     , paintActor : actor -> Image
+    , paintBackground : Duration -> Color
     , size : Length
     , gatherStats : List actor -> Stats
     , statsRetention : Duration
@@ -440,9 +441,10 @@ view setup model =
                     , Html.Attributes.style "height" "100%"
                     , Svg.Attributes.viewBox viewbox
                     , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
-                    , Html.Attributes.style "background" <|
-                        Color.toCssString <|
-                            Color.hsl 0.6 0.8 0.1
+                    , model.clock
+                        |> setup.paintBackground
+                        |> Color.toCssString
+                        |> Html.Attributes.style "background"
                     , Svg.Events.onClick VoidClicked
                     ]
                 |> Element.html

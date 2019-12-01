@@ -16,6 +16,7 @@ main =
         { size = meters 500
         , updateActor = updateActor
         , paintActor = paintActor
+        , paintBackground = always Color.black
         , init = init
         , gatherStats = always (Dict.singleton "Void" 0)
         , statsRetention = zero
