@@ -148,16 +148,16 @@ paintActor : Actor -> Ecosystem.Image
 paintActor actor =
     case actor of
         Living ->
-            { size = meters 1
-            , fill = Color.lightBlue
-            , stroke = Color.darkBlue
-            }
+            Ecosystem.Text
+                { size = meters 2
+                , content = "😬"
+                }
 
         Dead ->
-            { size = meters 1
-            , fill = Color.darkRed
-            , stroke = Color.lightRed
-            }
+            Ecosystem.Text
+                { size = meters 2
+                , content = "\u{1F9DF}\u{200D}" -- Zombie
+                }
 
 
 groupInfluence :

@@ -157,16 +157,18 @@ paintActor : Actor -> Ecosystem.Image
 paintActor actor =
     case actor of
         Uglon velocity ->
-            { size = meters 1
-            , fill = Color.lightBlue
-            , stroke = Color.darkBlue
-            }
+            Ecosystem.Dot
+                { size = meters 1
+                , fill = Color.lightBlue
+                , stroke = Color.darkBlue
+                }
 
         Pretton velocity ->
-            { size = meters 2
-            , fill = Color.darkRed
-            , stroke = Color.lightRed
-            }
+            Ecosystem.Dot
+                { size = meters 2
+                , fill = Color.darkRed
+                , stroke = Color.lightRed
+                }
 
 
 groupInfluence :

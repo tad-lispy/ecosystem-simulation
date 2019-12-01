@@ -35,7 +35,8 @@ updateActor id this environment =
 
 
 paintActor actor =
-    { size = meters 0.2
-    , fill = Color.lightBlue
-    , stroke = Color.blue
-    }
+    Ecosystem.Dot
+        { size = meters 0.2
+        , fill = Color.lightBlue
+        , stroke = Color.blue
+        }
