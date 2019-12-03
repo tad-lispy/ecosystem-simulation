@@ -45,7 +45,7 @@ Maybe m4? See https://mbreen.com/m4.html#toc21
 
 This should allow to include the actual code from src/Demos/Empty.elm here.
 
-Workflo could be the following. There is a README.m4 file (editable) and README.md (generated). We could use command like
+Workflow could be the following. There is a README.m4 file (editable) and README.md (generated). We could use command like
 
   make readme
 
@@ -361,7 +361,7 @@ velocity =
 > 
 > First it may be that there are no other actors in this simulation. Then the list of groups would be empty and its head would be `Nothing`. So `nearest` is a `Maybe Group`.
 > 
-> Second maybe concerns the direction. If the other actor is exactly in the same spot as this one then there would be no sense to talk about a direction (what's the direction from here to here?) and the `Vector2d.direction` function would return `Nothing`. Truth be told it will never happen - if another actor is at the same point as this one it will be skipped by the `Environment.groups` function. But the type system doesn't understands this. So `Vector2d.direction` returns a `Maybe Direction2d` and we need to deal with it. We combine the two maybes into one using clever `Maybe.andThen` function. If either of them is `Nothing` then the actor won't move (the `velocity` is set to `Vector2d.zero`). If both the nearest group and the direction exists then we use them to calculate velocity. 
+> Second maybe concerns the direction. If the other actor is exactly in the same spot as this one then there would be no sense to talk about a direction (what's the direction from here to here?) and the `Vector2d.direction` function would return `Nothing`. Truth be told it will never happen - if another actor is at the same point as this one it will be skipped by the `Environment.groups` function. But the type system doesn't understand this. So `Vector2d.direction` returns a `Maybe Direction2d` and we need to deal with it. We combine the two maybes into one using clever `Maybe.andThen` function. If either of them is `Nothing` then the actor won't move (the `velocity` is set to `Vector2d.zero`). If both the nearest group and the direction exists then we use them to calculate velocity. 
 
 That should solve the movement issue. Let's plug it into the `let` block and see. The whole `updateActor` function should look like this:
 
@@ -615,7 +615,7 @@ I hope you didn't find it too difficult to follow so far. If something in this t
 
 ## Design Goals
 
-There are several goals and constraints that drive the development of this system. I discuss them below.
+There are several goals and constraints that drive the development of this system. I will discuss them below.
 
 ### Fun 😀
 
