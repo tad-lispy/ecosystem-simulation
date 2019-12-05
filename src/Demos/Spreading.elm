@@ -18,6 +18,7 @@ main =
         { size = meters 500
         , updateActor = updateActor
         , paintActor = paintActor
+        , paintBackground = Color.hsl 0.6 0.8 0.1 |> always
         , init = init
         , gatherStats = List.length >> toFloat >> Dict.singleton "Actors"
         , statsRetention = minutes 15
@@ -115,7 +116,8 @@ updateActor id this environment =
 
 
 paintActor actor =
-    { size = meters 1
-    , fill = Color.white
-    , stroke = Color.green
-    }
+    Ecosystem.Dot
+        { size = meters 1
+        , fill = Color.white
+        , stroke = Color.green
+        }

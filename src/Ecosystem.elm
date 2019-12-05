@@ -3,7 +3,7 @@ module Ecosystem exposing
     , Change(..)
     , Coordinates
     , Id
-    , Image
+    , Image(..)
     , Program
     , Setup
     , Spawn
@@ -84,6 +84,7 @@ type alias Setup actor action =
         -> ActorUpdate actor action
     , init : List (Spawn actor action)
     , paintActor : actor -> Image
+    , paintBackground : Duration -> Color
     , size : Length
     , gatherStats : List actor -> Stats
     , statsRetention : Duration
@@ -112,11 +113,16 @@ type alias Id =
     Int
 
 
-type alias Image =
-    { fill : Color
-    , stroke : Color
-    , size : Length
-    }
+type Image
+    = Dot
+        { fill : Color
+        , stroke : Color
+        , size : Length
+        }
+    | Text
+        { content : String
+        , size : Length
+        }
 
 
 type alias Spawn actor action =
@@ -435,9 +441,10 @@ view setup model =
                     , Html.Attributes.style "height" "100%"
                     , Svg.Attributes.viewBox viewbox
                     , Svg.Attributes.preserveAspectRatio "xMidYMid slice"
-                    , Html.Attributes.style "background" <|
-                        Color.toCssString <|
-                            Color.hsl 0.6 0.8 0.1
+                    , model.clock
+                        |> setup.paintBackground
+                        |> Color.toCssString
+                        |> Html.Attributes.style "background"
                     , Svg.Events.onClick VoidClicked
                     ]
                 |> Element.html
@@ -628,19 +635,14 @@ paintActor :
     -> Svg Msg
 paintActor setup id position actor =
     let
-        image : Image
-        image =
-            setup.paintActor actor
+        shape : Svg msg
+        shape =
+            case setup.paintActor actor of
+                Dot dot ->
+                    paintDot dot
 
-        size : Float
-        size =
-            image.size
-                |> Quantity.at resolution
-                |> Pixels.inPixels
-
-        strokeWidth : Float
-        strokeWidth =
-            size / 5
+                Text text ->
+                    paintText text
 
         translation : Transformation Coordinates
         translation =
@@ -648,20 +650,8 @@ paintActor setup id position actor =
                 |> Vector2d.at resolution
                 |> Transformation.Translate
     in
-    Svg.circle
-        [ size
-            |> String.fromFloat
-            |> Svg.Attributes.r
-        , image.fill
-            |> Color.toCssString
-            |> Svg.Attributes.fill
-        , image.stroke
-            |> Color.toCssString
-            |> Svg.Attributes.stroke
-        , strokeWidth
-            |> String.fromFloat
-            |> Svg.Attributes.strokeWidth
-        , translation
+    Svg.g
+        [ translation
             |> Transformation.toString
             |> Svg.Attributes.transform
         , Html.Attributes.style "cursor" "pointer"
@@ -671,6 +661,58 @@ paintActor setup id position actor =
                 , True
                 )
             )
+        ]
+        [ shape ]
+
+
+paintText text =
+    let
+        fontSize =
+            text.size
+                |> Quantity.at resolution
+
+        translation : Transformation Pixels
+        translation =
+            Vector2d.xy (Quantity.divideBy -2 fontSize) (Quantity.divideBy 2 fontSize)
+                |> Transformation.Translate
+    in
+    Svg.text_
+        [ fontSize
+            |> Pixels.inPixels
+            |> String.fromFloat
+            |> Svg.Attributes.fontSize
+        , translation
+            |> Transformation.toString
+            |> Svg.Attributes.transform
+        ]
+        [ Svg.text text.content ]
+
+
+paintDot dot =
+    let
+        size : Float
+        size =
+            dot.size
+                |> Quantity.at resolution
+                |> Pixels.inPixels
+
+        strokeWidth : Float
+        strokeWidth =
+            size / 5
+    in
+    Svg.circle
+        [ size
+            |> String.fromFloat
+            |> Svg.Attributes.r
+        , dot.fill
+            |> Color.toCssString
+            |> Svg.Attributes.fill
+        , dot.stroke
+            |> Color.toCssString
+            |> Svg.Attributes.stroke
+        , strokeWidth
+            |> String.fromFloat
+            |> Svg.Attributes.strokeWidth
         ]
         []
 

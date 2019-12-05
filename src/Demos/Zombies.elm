@@ -2,7 +2,7 @@ module Demos.Zombies exposing (main)
 
 import Color exposing (Color)
 import Dict
-import Duration exposing (minutes)
+import Duration exposing (Duration, minutes)
 import Ecosystem exposing (Change(..))
 import Environment exposing (Environment)
 import Force exposing (Newtons, newtons)
@@ -19,10 +19,11 @@ import Vector2d exposing (Vector2d)
 main : Ecosystem.Program Actor Action
 main =
     Ecosystem.simulation
-        { size = meters 500
+        { size = meters 300
         , init = init
         , updateActor = updateActor
         , paintActor = paintActor
+        , paintBackground = paintBackground
         , gatherStats = gatherStats
         , statsRetention = minutes 15
         }
@@ -148,16 +149,16 @@ paintActor : Actor -> Ecosystem.Image
 paintActor actor =
     case actor of
         Living ->
-            { size = meters 1
-            , fill = Color.lightBlue
-            , stroke = Color.darkBlue
-            }
+            Ecosystem.Text
+                { size = meters 1
+                , content = "👨\u{200D}💼"
+                }
 
         Dead ->
-            { size = meters 1
-            , fill = Color.darkRed
-            , stroke = Color.lightRed
-            }
+            Ecosystem.Text
+                { size = meters 1
+                , content = "\u{1F9DF}\u{200D}" -- Zombie
+                }
 
 
 groupInfluence :
@@ -235,3 +236,46 @@ gatherStats actors =
         |> List.gatherEquals
         |> List.map countGroups
         |> Dict.fromList
+
+
+paintBackground time =
+    let
+        -- It's get a little bit red at night and blue at noon
+        hue =
+            0.8 - (0.2 * solarAltitude)
+
+        -- Gray at noon, vivid at night
+        saturation =
+            1 - (0.6 * solarAltitude)
+
+        -- Lighter at noon, darker at night
+        lightness =
+            0.3 * solarAltitude
+
+        -- Solar altitude is a function of the phase of the day
+        solarAltitude =
+            phase
+                - 0.5
+                |> abs
+                |> (-) 0.5
+                |> (*) 2
+
+        -- What phase of the day is it between 0 (00:00) and 1 (24:00)
+        phase : Float
+        phase =
+            time
+                |> Duration.inMilliseconds
+                |> floor
+                |> modBy (cycle |> Duration.inMilliseconds |> floor)
+                |> toFloat
+                |> (\value -> value / (cycle |> Duration.inMilliseconds))
+
+        -- How long is the simulated day
+        cycle : Duration
+        cycle =
+            minutes 1
+    in
+    Color.hsl
+        hue
+        saturation
+        lightness

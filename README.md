@@ -14,7 +14,7 @@ It's an Elm package. Install it the usual way:
 elm install tad-lispy/ecosystem-simulation
 ```
 
-For physical calculations (length, velocity, mass, etc.) we are using excellent [Units](https://package.elm-lang.org/packages/ianmackenzie/elm-units/latest/) and [Geometry](https://package.elm-lang.org/packages/ianmackenzie/elm-geometry/latest/) packages by @ianmackenzie and to control colors the [Color](https://package.elm-lang.org/packages/avh4/elm-color/latest/) package by @avh4. You will need them too:
+For physical calculations (length, velocity, mass, etc.) we are using excellent [Units](https://package.elm-lang.org/packages/ianmackenzie/elm-units/latest/) and [Geometry](https://package.elm-lang.org/packages/ianmackenzie/elm-geometry/latest/) packages by @ianmackenzie and to control colors the [Color](https://package.elm-lang.org/packages/avh4/elm-color/latest/) package by @avh4. You will need them too. Here is how to install these packages:
 
 ```sh
 elm install ianmackenzie/elm-units
@@ -45,20 +45,24 @@ Maybe m4? See https://mbreen.com/m4.html#toc21
 
 This should allow to include the actual code from src/Demos/Empty.elm here.
 
-Workflo could be the following. There is a README.m4 file (editable) and README.md (generated). We could use command like
+Workflow could be the following. There is a README.m4 file (editable) and README.md (generated). We could use command like
 
   make readme
 
-To generate it. In the CI the pipeline should fail if running the above command results in any changes (git diff trick). The readme target should be a dependency of the all target. If we also have a demos target, then the correctness of examples should be sufficently safeguarded.
+to generate it. In the CI the pipeline should fail if running the above command results in any changes (git diff trick). The readme target should be a dependency of the all target. If we also have a demos target, then the correctness of examples should be sufficently safeguarded.
 -->
 ```elm
 module Main exposing (main)
 
-import Color 
-import Ecosystem exposing (Change(..))
-import Environment 
-import Length exposing (meters)
-import Vector2d 
+import Color exposing (Color)
+import Dict
+import Ecosystem exposing (ActorUpdate, Change(..), Id, Spawn)
+import Environment exposing (Environment)
+import Interaction exposing (Interaction)
+import Length exposing (Length, meters)
+import Quantity exposing (zero)
+import Speed exposing (metersPerSecond)
+import Vector2d exposing (Vector2d)
 
 
 main =
@@ -66,7 +70,10 @@ main =
         { size = meters 500
         , updateActor = updateActor
         , paintActor = paintActor
+        , paintBackground = always Color.black
         , init = init
+        , gatherStats = always (Dict.singleton "Void" 0)
+        , statsRetention = zero
         }
 
 
@@ -83,10 +90,11 @@ updateActor id this environment =
 
 
 paintActor actor =
-    { size = meters 2
-    , fill = Color.lightBlue
-    , stroke = Color.blue
-    }
+    Ecosystem.Dot
+        { size = meters 0.2
+        , fill = Color.lightBlue
+        , stroke = Color.blue
+        }
 ```
 
 This should be enough to compile our program. Later I will discuss the code above, but first let's just try to run it. Enter the following command in the terminal:
@@ -103,11 +111,11 @@ First let's look at the `main` value. It's a standard Elm program. You can read 
 
 > The types are very important concept in Elm and sometimes I explain things in terms of types. Usually they are uppercase words (Like `Setup`, `Length`, etc). If I give type annotations (like below) it goes like this: first the name of the value (e.g. `size`) then a colon (`:`) and then type (e.g. `Length`). Don't wory if you don't understand the type system very well yet. You should be able to follow the tutorial anyway. Just glance over the fragments about types and come back later when you are more familiar with the concept.
 
-The setup record consists of four fields:
+The setup record consists of seven fields:
 
 - `size : Length`
 
-  The simulation takes place on a square wrapped plane. This field defines how long is the edge of this square. Basically how big is the simulated world. To express the size we need the `Length` module imported on top of our file and its `meters` function - to get length in meters.
+  The simulation takes place on a square wrapped plane. This field defines how long is the edge of this square. Basically how big is the simulated world. To express the size in meters we need the `Length` module imported on top of our file and its `meters` function.
 
 - `init : List (Spawn actor action)`
 
@@ -131,7 +139,7 @@ The setup record consists of four fields:
 
       - how much time has passed since last update 
 
-        so we can calculate rates of changes, like velocity etc.). 
+        so we can calculate rates of changes, like velocity etc. 
 
       It will be discussed in details later.
 
@@ -144,9 +152,9 @@ The setup record consists of four fields:
 
   We will discuss it in a moment (I promise!)
 
-- Paint Actor : actor -> Image
-
-  How should your actor be represented on the screen. Image is a record:
+- `paintActor : actor -> Image
+    `
+  How should your actor be represented on the screen. Image is a type with two variants: `Dot` and `Text`. For now we can use a `Dot` variant with a following record:
 
   ```elm
   { size : Length -- the radius of the dot
@@ -154,6 +162,18 @@ The setup record consists of four fields:
   , stroke : Color -- color of the outline (outer 20%)
   }
   ```
+
+- `paintBackground : Duration -> Color`
+
+  This function controls the appearence of the background. It has access to a duration of the simulation (how much time has passed since the start) and has to return a color.
+
+- `gatherStats : List actor -> Stats`
+
+  > TODO: Describe how gatherStats work
+
+- `statsRetention : Duration`
+
+  > TODO: Describe how statsRetention works
 
 ### First Actors
 
@@ -172,7 +192,7 @@ The `displacement` controls how far and in what direction the new actor will spa
 
 Newly spawned actors can immediately interact with other actors. You could use the `interactions` field for that, but for now let's not do this. It's a list, so we can simply set it to `[]` - an empty list.
 
-We have setup some concepts and should be ready to add some actors to our simulation. First we will need to provide concrete types to actor and action type parameters that we saw everywhere. Let's define them. The simplest type in Elm is called unit. It looks like this: `()`. There is only one possible value of this type that is also called unit and looks like this: `()`. Seriously. So let's define our custom types. Put the following in your code right after the all the imports:
+We have established some new concepts and should be ready to add actors to our simulation. First we will need to provide concrete types to `actor` and `action` type parameters that we saw everywhere. Let's define them. The simplest type in Elm is called _unit_. It looks like this: `()`. There is only one possible value of this type that is also called unit and looks like this: `()`. Seriously. So let's define our custom types. Put the following in your code right after the all the imports:
 
 ```elm
 type alias Actor =
@@ -238,7 +258,11 @@ import Speed exposing (metersPerSecond)
 import Direction2d
 ```
 
-Reload the browser and your actors should march across the screen at a steady pace of 5m per second. By this I mean 5m in their world - on your screen it will be much smaller distance. Everything is scaled. Notice that once they reach the "edge" they will re-appear on the other side. That's what I'm talking about when saying that the simulation happens on a wrapped plane. It works the same for left-right and up-down movement. In fact for the actors there is no such thing as the edge of the world - just like there is no such thing as the edge of the earth for us (take that, flat-earthers 🌍)
+Reload the browser and your actors should march across the screen at a steady pace of 5m per second. By this I mean 5m in their world - on your screen it will be much smaller distance. Everything is scaled. Notice that once they reach the "edge" they will re-appear on the other side. That's what I'm talking about when saying that the simulation happens on a wrapped plane. It works the same for left-right and up-down movement. In fact for the actors there is no such thing as the edge of the world - just like there is no such thing as the edge of the earth for us (take that, flat-earthers 🌍).
+
+### Keyboard shortcuts
+
+You can follow their movement by pressing one of the `w` `a` `s` `d` keys. If you click on one of the actors, the viewport will automatically follow it. Since there is no points of reference, it will look like they are not moving. With `-` and `+` buttons you can zoom in and out. With `p` you can play and pause the simulation. With `shift + p` you can step one frame (16ms) forward.
 
 ### The ActorUpdate Record
 
@@ -256,7 +280,7 @@ The `velocity` field controls in which direction and how fast is the actor movin
 
 > Don't worry about the `Coordinates` type parameter - if you ever need to provide it just use `Ecosystem.Coordinates`.
 
-The `change` controls how the internal state of the actor changes. It's a union type with the following constructors:
+The `change` controls how the internal state of the actor changes. It's a union type with the following variants:
 
   - `Unchanged`
 
@@ -337,7 +361,7 @@ velocity =
 > 
 > First it may be that there are no other actors in this simulation. Then the list of groups would be empty and its head would be `Nothing`. So `nearest` is a `Maybe Group`.
 > 
-> Second maybe concerns the direction. If the other actor is exactly in the same spot as this one then there would be no sense to talk about a direction (what's the direction from here to here?) and the `Vector2d.direction` function would return `Nothing`. Truth be told it will never happen - if another actor is at the same point as this one it will be skipped by the `Environment.groups` function. But the type system doesn't understands this. So `Vector2d.direction` returns a `Maybe Direction2d` and we need to deal with it. We combine the two maybes into one using clever `Maybe.andThen` function. If either of them is `Nothing` then the actor won't move (the `velocity` is set to `Vector2d.zero`). If both the nearest group and the direction exists then we use them to calculate velocity. 
+> Second maybe concerns the direction. If the other actor is exactly in the same spot as this one then there would be no sense to talk about a direction (what's the direction from here to here?) and the `Vector2d.direction` function would return `Nothing`. Truth be told it will never happen - if another actor is at the same point as this one it will be skipped by the `Environment.groups` function. But the type system doesn't understand this. So `Vector2d.direction` returns a `Maybe Direction2d` and we need to deal with it. We combine the two maybes into one using clever `Maybe.andThen` function. If either of them is `Nothing` then the actor won't move (the `velocity` is set to `Vector2d.zero`). If both the nearest group and the direction exists then we use them to calculate velocity. 
 
 That should solve the movement issue. Let's plug it into the `let` block and see. The whole `updateActor` function should look like this:
 
@@ -383,7 +407,7 @@ In the browser we should observe that the two actors move away from each other u
 
 Ok, now what about spawning? Let's consider where should an actor place its beloved child. Of course away from those nasty other actors. Simplest thing is to spawn away from the nearest group. 
 
-But wait! What if there is no other group (`nearest` is `Nothing`)?  If there is no "others" then there is no "away". We need to make some design decisions. We could just decide that the actor should remain the only one in the simulation. Why spoil the perfect state of loneliness. But that would be rather boring for us to watch. So why not spawn four nasty little actors and let them run away in all directions? Let's do that!
+But wait! What if there is no other group (`nearest` is `Nothing`)?  If there is no "others" then there is no "away". We need to make some design decisions. We could just decide that the actor should remain the only one in the simulation. Why spoil the perfect state of loneliness? But that would be rather boring for us to watch. So why not spawn four nasty little actors and let them run away in all directions? Let's do that!
 
 In the let block define `spawn` as follows.
 
@@ -442,7 +466,7 @@ case direction of
 We have to add new import:
 
 ```elm
-import Quantity
+import Quantity exposing (zero)
 ```
 
 Here is the complete code for the demo program:
@@ -451,11 +475,13 @@ Here is the complete code for the demo program:
 module Main exposing (main)
 
 import Color
+import Dict
 import Direction2d
+import Duration exposing (minutes)
 import Ecosystem exposing (Change(..))
 import Environment
 import Length exposing (meters)
-import Quantity
+import Quantity exposing (zero)
 import Speed exposing (metersPerSecond)
 import Vector2d
 
@@ -466,7 +492,10 @@ main =
         { size = meters 500
         , updateActor = updateActor
         , paintActor = paintActor
+        , paintBackground = always Color.black
         , init = init
+        , gatherStats = always (Dict.singleton "Void" 0)
+        , statsRetention = zero
         }
 
 
@@ -481,10 +510,6 @@ type alias Action =
 init =
     [ { actor = ()
       , displacement = Vector2d.zero
-      , interactions = []
-      }
-    , { actor = ()
-      , displacement = Vector2d.meters -5 0
       , interactions = []
       }
     ]
@@ -565,13 +590,14 @@ updateActor id this environment =
 
 
 paintActor actor =
-    { size = meters 1
-    , fill = Color.white
-    , stroke = Color.green
-    }
+    Ecosystem.Dot
+        { size = meters 1
+        , fill = Color.white
+        , stroke = Color.green
+        }
 ```
 
-Let's reload the browser and see! Hopefully they behave the way we wanted them to. And if we wait long enough the actors will fill the space more or less evenly and stop reproducing. That's interestingly because we didn't directly program them to do so. We have just instilled a deeply rooted hatred to one another and strong urge to reproduce. And here they are conquerring the world and exploiting every last bit of it. Maybe there is a lesson here? 
+Let's reload the browser and see! Hopefully they behave the way we wanted them to. And if we wait long enough the actors will fill the space more or less evenly and stop reproducing. That's interesting because we didn't directly program them to do so. We have just instilled a deeply rooted hatred to one another and strong urge to reproduce. And here they are conquerring the world and exploiting every last bit of it. Maybe there is a lesson here? 
 
 This is what I would call an emerging property. We program micro behaviours of actors and observe macro trends in the system.
 
@@ -585,11 +611,11 @@ It will create a file called `index.html` that you can open in your browser, sen
 
 I hope you didn't find it too difficult to follow so far. If something in this tutorial is not clear or just wrong please reach out to me by opening an issue or via Elm slack. I'm Tad Lispy there too. 
 
-> TODO: Next we will introduce a second kind of actor with a different attitude and play with interactions.
+> TODO: Next we will introduce a second kind of actor with a different attitude and play with interactions. We will also talk about gathering and retaining statistics about our actors and changing the appearence of actors and their environment.
 
 ## Design Goals
 
-There are several goals and constraints that drive the development of this system. I discuss them below.
+There are several goals and constraints that drive the development of this system. I will discuss them below.
 
 ### Fun 😀
 
@@ -615,7 +641,7 @@ Smooth animations, nice colors, crispy shapes. It should be attractive and fun t
 
 - Statistics
 
-  In the app there should be some simple graphs (population, etc.) There should also be a way to export data for more advanced analytics with tools like Jupyter Notebook.
+  In the app there should be some simple graphs (population, etc. - partially done). There should also be a way to export data for more advanced analytics with tools like Jupyter Notebook.
 
 - Embedding simulations
 
