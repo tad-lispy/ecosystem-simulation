@@ -14,7 +14,7 @@
     "elm-format": "^0.8.2",
     "elm-hot": "^1.1.2",
     "elm-json": "^0.2.2",
-    "node-elm-compiler": "^5.0.4",
+    "node-elm-compiler": "^5.0.6",
     "parcel": "^1.12.4",
     "pug": "^2.0.4",
     "serve": "^11.1.0",
